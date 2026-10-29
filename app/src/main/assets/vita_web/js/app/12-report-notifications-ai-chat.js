@@ -59,15 +59,42 @@ function renderReportTab() {
         const enteredLabs = list.filter(item => item.val !== null && item.val !== undefined && item.val !== "");
         if (enteredLabs.length) document.getElementById("repLabSectionWrapper")?.classList.remove("hidden");
         const units = { d3: "ng/mL", b12: "pg/mL", ferritin: "ng/mL", mg: "mg/dL", ca: "mg/dL", zinc: "µg/dL", creatinine: "mg/dL", folate: "ng/mL", alt: "U/L", hb: "g/dL", mcv: "fL", crp: "mg/L" };
+        const crpNum = parseLabNumericValue(labs.crp);
+        const hbNum = parseLabNumericValue(labs.hb);
         repLabBody.innerHTML = enteredLabs.length ? enteredLabs.map(item => {
+          const numVal = parseLabNumericValue(item.val);
+          let badgeHtml = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">Değerlendirildi</span>`;
+          let rowClass = "";
+          if (numVal !== null) {
+            const ev = KDSSRuleEngine.evaluate(item.key, numVal, p.gender || "K", item.ref, { age: p.age, crp: crpNum, hb: hbNum });
+            if (ev) {
+              if (ev.isUrgent || ev.isToxic || ev.tier === "critical_low" || ev.tier === "critical_high") {
+                badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-900 border border-rose-300"><i class="fa-solid fa-triangle-exclamation text-rose-600"></i> Kritik / Alarm (${escapeHtmlText(ev.statusText)})</span>`;
+                rowClass = "bg-rose-50/50";
+              } else if (ev.isLow || ev.status === "below_ref") {
+                badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300"><i class="fa-solid fa-arrow-down text-amber-700"></i> ${escapeHtmlText(ev.statusText || "Referans Altı")}</span>`;
+                rowClass = "bg-amber-50/35";
+              } else if (ev.isHigh || ev.status === "above_ref") {
+                badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-900 border border-orange-300"><i class="fa-solid fa-arrow-up text-orange-700"></i> ${escapeHtmlText(ev.statusText || "Referans Üstü - İnceleme")}</span>`;
+                rowClass = "bg-orange-50/35";
+              } else if (ev.isBorderline || ev.status === "borderline") {
+                badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200"><i class="fa-solid fa-circle-exclamation text-amber-600"></i> ${escapeHtmlText(ev.statusText || "Sınırda / Gri Bölge")}</span>`;
+              } else if (ev.status === "not_assessable") {
+                badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300">${escapeHtmlText(ev.statusText)}</span>`;
+              } else {
+                badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200"><i class="fa-solid fa-check text-emerald-600"></i> ${escapeHtmlText(ev.statusText || "Referans Aralığında")}</span>`;
+              }
+            }
+          }
           return `
-            <tr>
+            <tr class="${rowClass}">
               <td class="p-2 font-bold text-navy-900">${escapeHtmlText(item.name)}</td>
               <td class="p-2 font-mono font-bold">${escapeHtmlText(item.val)} <span class="font-normal text-slate-500">${units[item.key] || ""}</span></td>
               <td class="p-2 text-slate-600">${item.ref ? escapeHtmlText(item.ref) : "—"}</td>
+              <td class="p-2">${badgeHtml}</td>
             </tr>
           `;
-        }).join('') : `<tr><td class="p-3 text-center text-slate-400 italic" colspan="3">Kayıtlı laboratuvar sonucu yok.</td></tr>`;
+        }).join('') : `<tr><td class="p-3 text-center text-slate-400 italic" colspan="4">Kayıtlı laboratuvar sonucu yok.</td></tr>`;
         if (egfrNote) egfrNote.textContent = egfr ? `eGFR (CKD-EPI 2021): ${egfr.egfr} mL/dk/1,73 m²` : "";
       }
 
@@ -181,12 +208,460 @@ function renderReportTab() {
             <tbody class="divide-y divide-slate-100">${products.map(item => `<tr><td class="p-2 font-bold text-navy-900">${escapeHtmlText(item.name || "Ürün")}</td><td class="p-2">${escapeHtmlText(item.selectedForm || item.form || "—")}</td><td class="p-2">${escapeHtmlText(item.doseText || item.dosageText || "Belirtilmemiş")}</td></tr>`).join("")}</tbody>
           </table>` : `<p class="p-3 text-xs text-slate-500">Kayıtlı ilaç/takviye ürünü yok.</p>`;
       }
+
+      renderProfessorClinicalSynthesis(false);
     }
+
+    /* ========================================================================= */
+    /*   UZMAN DAHİLİYE HEKİMİ & PROF. DR. KLİNİK SENTEZ VE ALARM DENETİM MOTORU */
+    /* ========================================================================= */
+    function buildProfessorClinicalSynthesisData() {
+      const p = state.user || defaultUserProfile;
+      const gender = p.gender === "E" ? "E" : "K";
+      const age = Number(p.age) || 32;
+      const labs = state.labValues || {};
+      const latestLabRecord = state.labHistory?.[0] || null;
+      const getRef = key => String(latestLabRecord?.references?.[key] || state.labReferences?.[key] || "").trim();
+
+      const hasRecentSupplements = Boolean(document.getElementById("repSynthRecentSupplementUse")?.checked) || (Array.isArray(state.supplements) && state.supplements.length > 0);
+      const isPregnantOrLactating = Boolean(document.getElementById("repSynthPregnancyContext")?.checked);
+      const hasBiotinExposure = Boolean(document.getElementById("repSynthBiotinContext")?.checked);
+
+      const val = key => parseLabNumericValue(labs[key]);
+      const d3 = val("d3"), b12 = val("b12"), ferritin = val("ferritin"), mg = val("mg"), ca = val("ca"),
+            zinc = val("zinc"), creatinine = val("creatinine"), folate = val("folate"), alt = val("alt"),
+            hb = val("hb"), mcv = val("mcv"), crp = val("crp");
+
+      const egfrObj = (creatinine !== null && age >= 18 && !isPregnantOrLactating)
+        ? calculateCKDEPI_eGFR(creatinine, age, gender)
+        : null;
+
+      const labMetaList = [
+        { key: "hb", label: "Hemoglobin (Hb)", unit: "g/dL", v: hb },
+        { key: "mcv", label: "MCV (Ortalama Eritrosit Hacmi)", unit: "fL", v: mcv },
+        { key: "ferritin", label: "Ferritin (Demir Deposu)", unit: "ng/mL", v: ferritin },
+        { key: "b12", label: "Vitamin B12 (Kobalamin)", unit: "pg/mL", v: b12 },
+        { key: "folate", label: "Folat (B9 Vitamini)", unit: "ng/mL", v: folate },
+        { key: "d3", label: "25(OH) Vitamin D", unit: "ng/mL", v: d3 },
+        { key: "ca", label: "Total Kalsiyum", unit: "mg/dL", v: ca },
+        { key: "mg", label: "Serum Magnezyum", unit: "mg/dL", v: mg },
+        { key: "zinc", label: "Serum Çinko", unit: "µg/dL", v: zinc },
+        { key: "creatinine", label: "Serum Kreatinin", unit: "mg/dL", v: creatinine },
+        { key: "alt", label: "ALT (Karaciğer Enzimi)", unit: "U/L", v: alt },
+        { key: "crp", label: "CRP (Akut Faz Reaktanı)", unit: "mg/L", v: crp }
+      ];
+
+      const evaluatedLabs = [];
+      const abnormalLabs = [];
+      labMetaList.forEach(item => {
+        if (item.v === null) return;
+        const refStr = getRef(item.key);
+        const ev = KDSSRuleEngine.evaluate(item.key, item.v, gender, refStr, { age, crp, hb });
+        const entry = { ...item, ref: refStr || ev?.labReference || "", ev };
+        evaluatedLabs.push(entry);
+        if (ev && (ev.isUrgent || ev.isToxic || ev.isLow || ev.isHigh || ev.isBorderline || ev.status === "below_ref" || ev.status === "above_ref")) {
+          abnormalLabs.push(entry);
+        }
+      });
+
+      const activeSymptomKeys = Array.from(state.selectedSymptoms || []).filter(k => ANAMNESIS_DICTIONARY[k]);
+      const alarms = [];
+      const addAlarm = (level, title, detail, action) => alarms.push({ level, title, detail, action });
+
+      // 1. KLİNİK ALARM VE KIRMIZI BAYRAK DENETİMİ (PROFESÖR DOKTOR PERSPEKTİFİ)
+      if (hb !== null) {
+        const hbThreshold = isPregnantOrLactating ? 11.0 : (gender === "E" ? 13.0 : 12.0);
+        if (hb < 8.5) {
+          addAlarm("critical", `Kritik Anemi Alarmı (Hb: ${hb} g/dL)`, "Hemoglobin düzeyi 8,5 g/dL altındadır; doku hipoksisi ve yüksek debili kardiyovasküler yük açısından kritik eşiktedir.", "Gecikmeden yüz yüze İç Hastalıkları / Hematoloji değerlendirmesi, retikülosit sayımı, periferik yayma ve kanama odağı taraması önerilir.");
+        } else if (hb < hbThreshold && (gender === "E" || age >= 50) && (ferritin === null || ferritin < 45)) {
+          addAlarm("critical", `Erkek / >50 Yaş Hastada Anemi & Demir Eksikliği Alarmı (Hb: ${hb} g/dL${ferritin !== null ? `, Ferritin: ${ferritin} ng/mL` : ""})`, "Yetişkin erkeklerde ve postmenopozal (>50 yaş) kadınlarda demir eksikliği anemisi aksi kanıtlanana kadar gastrointestinal sistemden kronik gizli kan kaybı açısından kırmızı bayraktır.", "Ampirik demir takviyesiyle semptomları maskelemeden önce gaitada gizli kan (GGK) ve gastroenterolojik endoskopik inceleme hekimce planlanmalıdır.");
+        } else if (hb > 18.5) {
+          addAlarm("critical", `Belirgin Eritrositoz / Polisitemi Alarmı (Hb: ${hb} g/dL)`, "Hemoglobin 18,5 g/dL üzerindedir; hiperviskozite ve tromboembolik risk açısından değerlendirilmelidir.", "Hematoloji konsültasyonu, arteriyel oksijen satürasyonu, eritropoietin (EPO) düzeyi ve JAK2 mutasyon analizi değerlendirilmelidir.");
+        }
+      }
+
+      if (ca !== null) {
+        if (ca > 11.2) {
+          addAlarm("critical", `Belirgin Hiperkalsemi Alarmı (Total Ca: ${ca} mg/dL)`, "Kalsiyum 11,2 mg/dL üzerindedir; kardiyak iletim (kısa QT), böbrek fonksiyonu ve santral sinir sistemi açısından acil değerlendirme gerektirir.", "D vitamini ve kalsiyum içeren tüm ürünler derhal kesilmeli; İyonize Kalsiyum, Serum Albümin, İntakt PTH, Fosfor ve Kreatinin acilen ölçülmelidir.");
+        } else if (ca > 10.2) {
+          addAlarm("high", `Hiperkalsemi Güvenlik Kilidi (Total Ca: ${ca} mg/dL)`, `25(OH)D düzeyi ${d3 !== null && d3 < 20 ? `düşük (${d3} ng/mL) olsa dahi ` : ""}serum kalsiyumu >10,2 mg/dL olduğundan D3/Kalsiyum yüklemesi kontrendikedir.`, "Primer Hiperparatiroidizm veya ailesel hipokalsiürik hiperkalsemi ayırıcı tanısı için PTH ve Albümin-düzeltilmiş kalsiyum (Payne formülü) hesaplanmalıdır.");
+        } else if (ca < 7.5 || (ca < 8.5 && activeSymptomKeys.includes("lip_twitching"))) {
+          addAlarm("critical", `Semptomatik / Ciddi Hipokalsemi Alarmı (Total Ca: ${ca} mg/dL)`, "Nöromüsküler irritabilite (Chvostek/Trousseau tetani eğilimi) ve QT uzaması riski mevcuttur.", "Serum Albümin (hipoalbüminemiye bağlı yalancı hipokalsemiyi dışlamak için), Magnezyum, PTH ve 25(OH)D düzeyleri birlikte değerlendirilmelidir.");
+        }
+      }
+
+      if (mg !== null) {
+        if (mg < 1.25) {
+          addAlarm("critical", `Kritik Hipomagnezemi Alarmı (Mg: ${mg} mg/dL / <0,5 mmol/L)`, "Ventriküler aritmi (Torsades de Pointes), tetani ve dirençli hipokalemi/hipokalsemi riski yüksektir.", "Gecikmeden hekim başvurusu, EKG ve eşlik eden Serum Potasyum (K+) ile Kalsiyum kontrolü gereklidir.");
+        } else if (mg > 4.2) {
+          addAlarm("critical", `Hipermagnezemi / Magnezyum Toksisitesi Alarmı (Mg: ${mg} mg/dL)`, "Derin tendon refleksi kaybı, hipotansiyon ve AV iletim bloğu riski taşır.", "Magnezyum içeren tüm takviye/antiasit/laksatifler kesilmeli ve böbrek fonksiyonları (eGFR) kontrol edilmelidir.");
+        }
+      }
+
+      if (crp !== null && crp >= 50) {
+        addAlarm("critical", `Ciddi Akut Faz / Enfeksiyon Alarmı (CRP: ${crp} mg/L)`, "CRP 50 mg/L üzerindedir; akut bakteriyel enfeksiyon, sistemik vaskülit veya ciddi doku inflamasyonu lehinedir.", "Ateş, odak bulgusu ve tam kan sayımı (Lökosit/Nötrofil) ile acil hekim muayenesi önerilir; aktif enfeksiyon sırasında oral demir kullanımı ertelenmelidir.");
+      } else if (crp !== null && crp > 5 && ferritin !== null && ferritin >= 15 && ferritin < 70) {
+        addAlarm("high", `Enflamasyon Altında Maskelenmiş Demir Eksikliği Riski (CRP: ${crp} mg/L, Ferritin: ${ferritin} ng/mL)`, "Ferritin pozitif bir akut faz reaktanıdır; CRP > 5 mg/L iken ferritin sahte olarak normal (15–70 ng/mL) görünebilir (WHO 2020 enflamasyon sınırı <70 ng/mL).", "Gerçek demir durumunu doğrulamak için Transferrin Satürasyonu (TSAT < %20) ve Soluble Transferrin Reseptörü (sTfR) değerlendirilmelidir.");
+      }
+
+      if (ferritin !== null) {
+        if (ferritin >= 500) {
+          addAlarm(ferritin >= 1000 ? "critical" : "high", `Belirgin Hiperferritinemi Alarmı (Ferritin: ${ferritin} ng/mL)`, "Ferritin ≥ 500 ng/mL düzeyi basit diyet fazlalığı ile açıklanamaz; Herediter Hemokromatozis, hepatoselüler hasar, metabolik hiperferritinemi veya sistemik inflamasyon araştırılmalıdır.", "Demir içeren ürünler kesinlikle kullanılmamalı; Açlık Transferrin Satürasyonu (TSAT), Karaciğer Enzimleri (ALT/AST/GGT) ve CRP incelenmelidir.");
+        }
+      }
+
+      if (mcv !== null && mcv < 78 && ferritin !== null && ferritin >= 30) {
+        addAlarm("high", `Mikrositoz + Normal Ferritin: Talasemi Taşıyıcılığı / Hemoglobinopati Uyarısı (MCV: ${mcv} fL, Ferritin: ${ferritin} ng/mL)`, "MCV belirgin düşük (<78 fL) olmasına rağmen demir depoları (Ferritin) dolu görünmektedir; bu tablo Beta/Alfa Talasemi taşıyıcılığı veya kronik hastalık anemisi ile uyumludur.", "Talasemi taşıyıcılarına yanlışlıkla demir takviyesi verilmesi organlarda demir birikimine yol açar; Mentzer indeksi ve Hemoglobin Elektroforezi (HPLC) ile ayırıcı tanı yapılmalıdır.");
+      }
+
+      if (b12 !== null) {
+        const hasNeuroSymptom = activeSymptomKeys.some(k => ["numbness", "brain_fog", "burning_tongue", "hand_tremor"].includes(k));
+        if (b12 < 180 || (b12 < 350 && hasNeuroSymptom)) {
+          addAlarm(b12 < 180 && hasNeuroSymptom ? "critical" : "high", `Nörolojik Belirti Eşlikli B12 Eksikliği / Gri Bölge Alarmı (B12: ${b12} pg/mL)`, `B12 düzeyi ${b12 < 180 ? "belirgin düşük (<180 pg/mL)" : "gri bölgede (180–350 pg/mL)"} olup hastada nörolojik/mukozal belirtiler mevcuttur.${folate !== null && folate > 12 ? ` Ayrıca Folat düzeyi (${folate} ng/mL) yüksek/normal olduğundan megaloblastik anemi bulgusunu maskeleyerek subakut kombine nörolojik dejenerasyonu gizleyebilir.` : ""}`, "Hücresel B12 eksikliğini doğrulamak için Holotranskobalamin (Aktif B12), Metilmalonik Asit (MMA) ve Homosistein düzeyleri hekimce incelenmelidir.");
+        } else if (b12 > 1000 && !hasRecentSupplements) {
+          addAlarm("high", `Takviyesiz Açıklanamayan Yüksek B12 Uyarısı (B12: ${b12} pg/mL)`, "Dışarıdan B12 takviyesi/enjeksiyonu almayan bir bireyde >1000 pg/mL B12 düzeyi, haptokorrin (transkobalamin I/III) artışına bağlı olarak karaciğer, böbrek veya hematolojik süreçlerin incelenmesini gerektirir.", "Tam kan sayımı, periferik yayma, karaciğer ve böbrek fonksiyon testleri hekimle değerlendirilmelidir.");
+        }
+      }
+
+      if (creatinine !== null) {
+        if (isPregnantOrLactating && creatinine > 0.85) {
+          addAlarm("critical", `Gebelik Fizyolojisinde Yüksek Kreatinin Alarmı (Kreatinin: ${creatinine} mg/dL)`, "Gebelikte glomerüler hiperfiltrasyon nedeniyle normal serum kreatinin <0,80 mg/dL'dir; >0,85 mg/dL değerler gebe olmayan referansında 'normal' görünse dahi gebelikte böbrek fonksiyon kaybı veya preeklampsi açısından anlamlıdır.", "Standart CKD-EPI formülü gebelikte kullanılmaz; Kadın Doğum ve Nefroloji/Dahiliye değerlendirmesi önerilir.");
+        } else if (egfrObj && egfrObj.egfr < 60) {
+          addAlarm(egfrObj.egfr < 30 ? "critical" : "high", `Azalmış Renal Filtrasyon Alarmı (CKD-EPI eGFR: ${egfrObj.egfr} mL/dk/1.73m² — Evre ${egfrObj.stage})`, "Böbrek süzme hızı <60 mL/dk/1.73m² altındadır; magnezyum, kalsiyum, potasyum ve kreatin gibi bileşenlerin renal klirensi azalır ve birikim/toksisite riski doğar.", "Nefrotoksik ilaç/takviyelerden kaçınılmalı; idrar albümin/kreatinin oranı (ACR) ve elektrolit paneli hekimce izlenmelidir.");
+        }
+      }
+
+      if (alt !== null && alt > 50) {
+        addAlarm(alt > 120 ? "critical" : "high", `Hepatik Güvenlik / Karaciğer Enzim Alarmı (ALT: ${alt} U/L)`, `ALT düzeyi ${alt > 120 ? "normal üst sınırın >3 katı düzeyinde" : "referans üstünde (>50 U/L)"} saptanmıştır; ilaç/bitkisel takviye ilişkili karaciğer hasarı (DILI), yağlı karaciğer (MASLD) veya viral/otoimmün süreçler araştırılmalıdır.`, "Karaciğerde metabolize olan yoğun takviye protokolleri başlatılmamalı; AST, GGT, ALP, Bilirubin ve hepatobiliyer ultrasonografi değerlendirilmelidir.");
+      }
+
+      if (d3 !== null && d3 > 100) {
+        addAlarm(d3 > 150 ? "critical" : "high", `Hipervitaminoz D / Toksisite Riski Alarmı (25(OH)D: ${d3} ng/mL)`, "25(OH)D düzeyi >100 ng/mL üzerindedir; hiperkalsiüri, nefrolitiyazis (böbrek taşı) ve hiperkalsemi riski taşır.", "D vitamini alımı durdurulmalı, serum Kalsiyum ve 24 saatlik idrarda kalsiyum atılımı izlenmelidir.");
+      }
+
+      // 2. BELİRTİ – BİYOBELİRTEÇ KLİNİK KORELASYON ANALİZİ
+      const symptomCorrelations = [];
+      activeSymptomKeys.forEach(symKey => {
+        const meta = ANAMNESIS_DICTIONARY[symKey];
+        if (!meta) return;
+        const relatedMarkers = [];
+        if ((meta.nutrients || []).includes("B12") && b12 !== null) relatedMarkers.push({ label: "B12", val: `${b12} pg/mL`, concordant: b12 < 350 });
+        if ((meta.nutrients || []).includes("Demir") && ferritin !== null) relatedMarkers.push({ label: "Ferritin", val: `${ferritin} ng/mL`, concordant: ferritin < 45 || (crp > 5 && ferritin < 70) });
+        if ((meta.nutrients || []).includes("Demir") && hb !== null) relatedMarkers.push({ label: "Hb", val: `${hb} g/dL`, concordant: hb < (gender === "E" ? 13 : 12) });
+        if ((meta.nutrients || []).includes("D3_K2") && d3 !== null) relatedMarkers.push({ label: "25(OH)D", val: `${d3} ng/mL`, concordant: d3 < 30 });
+        if ((meta.nutrients || []).includes("Magnezyum") && mg !== null) relatedMarkers.push({ label: "Magnezyum", val: `${mg} mg/dL`, concordant: mg < 1.95 });
+        if ((meta.nutrients || []).includes("Kalsiyum") && ca !== null) relatedMarkers.push({ label: "Kalsiyum", val: `${ca} mg/dL`, concordant: ca < 8.8 });
+        if ((meta.nutrients || []).includes("Folat") && folate !== null) relatedMarkers.push({ label: "Folat", val: `${folate} ng/mL`, concordant: folate < 5.0 });
+        if ((meta.nutrients || []).includes("Çinko") && zinc !== null) relatedMarkers.push({ label: "Çinko", val: `${zinc} µg/dL`, concordant: zinc < 75 });
+
+        const concordantHits = relatedMarkers.filter(m => m.concordant);
+        if (concordantHits.length > 0) {
+          symptomCorrelations.push({
+            type: "concordant",
+            symptom: meta.medicalName || meta.question,
+            detail: `Bildirilen belirti, kayıtlı ${concordantHits.map(m => `${m.label} (${m.val})`).join(" ve ")} düzeyi ile klinik olarak örtüşmektedir (konkordan bulgu).`
+          });
+        } else if (relatedMarkers.length > 0) {
+          symptomCorrelations.push({
+            type: "discordant",
+            symptom: meta.medicalName || meta.question,
+            detail: `İlişkili biyobelirteçler (${relatedMarkers.map(m => `${m.label}: ${m.val}`).join(", ")}) referans aralığında görünmektedir; tiroid fonksiyonları (TSH), uyku apnesi, nöropati veya eritrosit içi eksiklik açısından ayırıcı tanı yapılmalıdır.`
+          });
+        } else {
+          symptomCorrelations.push({
+            type: "untested",
+            symptom: meta.medicalName || meta.question,
+            detail: `Bu belirtiyi aydınlatacak biyokimyasal parametreler (${(meta.nutrients || []).join(", ") || "Klinik panel"}) henüz tahlil kaydında yer almamaktadır.`
+          });
+        }
+      });
+
+      // 3. KRONİK İLAÇ VE ETKİLEŞİM KALKANI VERİLERİ
+      const interactions = typeof evaluateClinicalDrugNutrientInteractions === "function"
+        ? evaluateClinicalDrugNutrientInteractions()
+        : [];
+      const medInfo = typeof getActiveUserMedicationCodesAndLabels === "function"
+        ? getActiveUserMedicationCodesAndLabels()
+        : { activeCodes: p.chronic || [], customMeds: p.medications || [], matchedLabelsByCode: {} };
+
+      const medicationDepletionNotes = [];
+      if (medInfo.activeCodes.includes("ppi")) {
+        medicationDepletionNotes.push("Proton Pompa İnhibitörü (PPI) kullanımı mide asidini baskılayarak besinsel B12, Ferrik Demir (Fe3+), Kalsiyum ve Magnezyum emilimini azaltır.");
+      }
+      if (medInfo.activeCodes.includes("metformin")) {
+        medicationDepletionNotes.push("Metformin kullanımı ileumda kalsiyum bağımlı intrinsik faktör-B12 kompleks emilimini bozarak B12 eksikliği ve periferik nöropati riskini artırır.");
+      }
+      if (medInfo.activeCodes.includes("diuretic")) {
+        medicationDepletionNotes.push("Diüretik (idrar söktürücü) kullanımı renal tübüler Magnezyum, Potasyum ve Çinko kaybına (veya tiyazidlerle hiperkalsemi eğilimine) yol açabilir.");
+      }
+      if (medInfo.activeCodes.includes("levothyroxine")) {
+        medicationDepletionNotes.push("Levotiroksin sabah aç karnına alınmalıdır; Demir, Kalsiyum ve Magnezyum ile arasında en az 4 saat şelasyon aralığı bırakılmalıdır.");
+      }
+      if (medInfo.activeCodes.includes("blood_thinner")) {
+        medicationDepletionNotes.push("Antikoagülan / Kan sulandırıcı kullanımda K2 vitamini (INR antagonizması) ve yüksek doz Omega-3/E vitamini hekim onayı olmadan kullanılmamalıdır.");
+      }
+
+      // 4. BİYOLOJİK REFERANS & EKSİK BİLGİLENDİRME ÖNLEYİCİ DENETİM NOTLARI
+      const auditNotes = [];
+      if (hasBiotinExposure) {
+        auditNotes.push("⚡ BİOTİN (B7) İNTERFERANS UYARISI: Son 72 saat içinde yüksek doz Biotin alımı bildirildi. Streptavidin-biotin bazlı laboratuvar kitlerinde 25(OH)D, B12, Folat ve Serbest T4 sahte yüksek; TSH ise sahte düşük çıkabilir. Şüpheli sonuçlar 72 saat biotin kesintisi sonrası tekrarlanmalıdır.");
+      }
+      if (ca !== null) {
+        auditNotes.push(`• Düzeltilmiş Kalsiyum Notu: Ölçülen Total Kalsiyum (${ca} mg/dL) serum albümin düzeyine bağımlıdır (Payne Formülü: Düzeltilmiş Ca = Ölçülen Ca + 0,8 × [4,0 - Albümin]). Hipoalbüminemi varlığında gerçek iyonize kalsiyum olduğundan düşük görünebilir.`);
+      }
+      if (hb !== null && mcv !== null && mcv >= 80 && mcv <= 100 && hb < (gender === "E" ? 13 : 12)) {
+        auditNotes.push(`• Normositer Anemi & Dimorfik Maskeleme Notu: MCV (${mcv} fL) normal aralıkta olsa dahi, eşzamanlı Demir (mikrositer) ve B12/Folat (makrositer) eksikliği birbirini aritmetik olarak nötrleyebilir. Tam kan sayımında RDW (Eritrosit Dağılım Genişliği) yüksekliği (% >14,5) ve periferik yayma kontrol edilmelidir.`);
+      }
+      if (mg !== null && mg >= 1.83 && mg <= 2.1 && activeSymptomKeys.some(k => ["night_cramps", "eyelid_twitching", "restlessness"].includes(k))) {
+        auditNotes.push(`• ekstrasellüler Magnezyum Sınırlılığı: Serum magnezyumu (${mg} mg/dL) toplam vücut magnezyumunun yalnızca %1'ini yansıtır; normal serum düzeyi hücre içi (eritrosit içi) magnezyum açığını tek başına dışlamaz.`);
+      }
+      if (auditNotes.length === 0) {
+        auditNotes.push("• Laboratuvarların sunduğu biyolojik referans aralıkları toplumun %95'lik istatistiksel dağılımını gösterir; klinik kararlar hastanın semptomları, bazal trendi, pre-analitik açlık/hemoliz durumu ve ilaç öyküsüyle birlikte hekim tarafından verilmelidir.");
+      }
+
+      // 5. YAPILANDIRILMIŞ PROFESÖR DOKTOR ÖN ÖZET METNİ (EPİKRİZ PARAGRAFLARI)
+      const activeMedLabels = Object.values(medInfo.matchedLabelsByCode || {});
+      const medSummaryStr = activeMedLabels.length > 0
+        ? activeMedLabels.join(", ")
+        : (p.chronic?.length ? p.chronic.join(", ") : "kayıtlı kronik hastalık/ilaç beyanı bulunmayan");
+
+      const alarmCount = alarms.length;
+      const criticalCount = alarms.filter(a => a.level === "critical").length;
+
+      const para1 = `<strong>1. Klinik Profil &amp; Ön Triyaj Özeti:</strong> <strong>${escapeHtmlText(p.name || "Hasta")}</strong> (${age} yaş, ${gender === "E" ? "Erkek" : "Kadın"}${isPregnantOrLactating ? " — Gebelik/Laktasyon Fizyolojisi" : ""}, VKİ: ${escapeHtmlText(p.bmi || "-")} kg/m², ${escapeHtmlText(medSummaryStr)}) için yapılan çok boyutlu dahiliye sentezinde; <strong>${evaluatedLabs.length}</strong> biyobelirteç, <strong>${activeSymptomKeys.length}</strong> aktif klinik belirti ve <strong>${interactions.length}</strong> ilaç/besin etkileşim kuralı çapraz denetlenmiştir.${egfrObj ? ` CKD-EPI (2021) tahmini glomerüler filtrasyon hızı <strong>${egfrObj.egfr} mL/dk/1,73m² (Evre ${escapeHtmlText(egfrObj.stage)})</strong> olarak hesaplanmıştır.` : ""}`;
+
+      const para2 = alarmCount > 0
+        ? `<strong>2. Öncelikli Klinik "Alarm" ve Kırmızı Bayrak Sentezi:</strong> Denetim sonucunda hekim konsültasyonunda öncelikle değerlendirilmesi gereken <strong>${alarmCount} klinik uyarı (${criticalCount} kritik/panik eşik)</strong> saptanmıştır: <em>${alarms.map(a => escapeHtmlText(a.title)).join("; ")}</em>. Bu bulgular otomatik takviye başlanmasını değil, altta yatan etyolojinin uzman hekimce aydınlatılmasını gerektirir.`
+        : `<strong>2. Biyokimyasal Referans ve Alarm Denetimi:</strong> Mevcut kayıtlı verilerde akut panik/toksisite eşiğinde bir biyokimyasal alarm saptanmamıştır.${abnormalLabs.length > 0 ? ` Bununla birlikte referans dışı veya sınırda seyreden <strong>${abnormalLabs.length} parametre (${abnormalLabs.map(l => `${escapeHtmlText(l.label)}: ${l.v} ${l.unit}`).join(", ")})</strong> klinik öyküyle birlikte değerlendirilmelidir.` : " Girilen tahliller referans sınırları içerisindedir."}`;
+
+      const concordantList = symptomCorrelations.filter(c => c.type === "concordant");
+      const discordantList = symptomCorrelations.filter(c => c.type === "discordant" || c.type === "untested");
+      const para3 = activeSymptomKeys.length > 0
+        ? `<strong>3. Semptom – Biyobelirteç Korelasyonu:</strong> Hastanın bildirdiği aktif yakınmalardan ${concordantList.length > 0 ? `<strong>${concordantList.map(c => escapeHtmlText(c.symptom)).join(", ")}</strong> bulguları mevcut laboratuvar sapmalarıyla doğrudan korelasyon göstermektedir.` : "hiçbiri tek başına mevcut tahlil düşüklükleriyle tam açıklanamamaktadır."} ${discordantList.length > 0 ? `Ayrıca <strong>${discordantList.map(c => escapeHtmlText(c.symptom)).join(", ")}</strong> yakınmaları için eksik biyobelirteçlerin tamamlanması ve ayırıcı tanı (tiroid, demir bağlama/TSAT, aktif B12/MMA) önerilir.` : ""}`
+        : `<strong>3. Semptom – Biyobelirteç Korelasyonu:</strong> Hasta tarafından aktif bir fiziksel belirti işaretlenmemiştir; değerlendirme asemptomatik biyokimyasal tarama ve profil verileri üzerinden yürütülmüştür.`;
+
+      const para4 = (interactions.length > 0 || medicationDepletionNotes.length > 0)
+        ? `<strong>4. Farmakolojik Etkileşim &amp; Güvenli Uygulama Sentezi:</strong> ${interactions.length > 0 ? `Kayıtlı protokolde <strong>${interactions.length} aktif ilaç-takviye veya mineral-mineral çakışması</strong> (${interactions.map(i => escapeHtmlText(i.title.replace(/^[⛔⚠️]\s*/, ""))).join("; ")}) tespit edilmiştir. ` : ""}${medicationDepletionNotes.map(n => escapeHtmlText(n)).join(" ")} Tedavi/takviye doz ve saat planlaması yalnızca hekim onayıyla yapılmalıdır.`
+        : `<strong>4. Farmakolojik Etkileşim &amp; Güvenli Uygulama Sentezi:</strong> Kayıtlı ilaç ve ürünler arasında aktif bir şelasyon veya majör farmakokinetik çakışma saptanmamıştır. Her türlü takviye veya doz değişikliği hekim kararıyla uygulanmalıdır.`;
+
+      const plainTextSummary = [para1, para2, para3, para4]
+        .map(html => html.replace(/<[^>]+>/g, ""))
+        .join("\n\n");
+
+      return {
+        alarms,
+        criticalCount,
+        evaluatedLabs,
+        abnormalLabs,
+        symptomCorrelations,
+        interactions,
+        medicationDepletionNotes,
+        auditNotes,
+        narrativeHtml: `<p>${para1}</p><p>${para2}</p><p>${para3}</p><p>${para4}</p>`,
+        plainTextSummary,
+        timestamp: new Date().toLocaleString("tr-TR")
+      };
+    }
+
+    function renderProfessorClinicalSynthesis(showNotification = false) {
+      const wrapper = document.getElementById("repProfessorSynthesisWrapper");
+      if (!wrapper) return;
+
+      const data = buildProfessorClinicalSynthesisData();
+      state.lastProfessorSynthesis = data;
+
+      const badgeEl = document.getElementById("repSynthesisTriajeBadge");
+      if (badgeEl) {
+        if (data.criticalCount > 0) {
+          badgeEl.className = "text-[10px] font-black px-2.5 py-0.5 rounded-full bg-rose-600 text-white border border-rose-700 shadow-xs";
+          badgeEl.innerHTML = `<i class="fa-solid fa-bell mr-1"></i> ${data.criticalCount} Kritik Klinik Alarm`;
+        } else if (data.alarms.length > 0 || data.abnormalLabs.length > 0 || data.interactions.length > 0) {
+          badgeEl.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300";
+          badgeEl.innerHTML = `<i class="fa-solid fa-circle-exclamation mr-1"></i> ${data.alarms.length + data.abnormalLabs.length} Klinik Dikkat Bulgusu`;
+        } else {
+          badgeEl.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300";
+          badgeEl.innerHTML = `<i class="fa-solid fa-shield-heart mr-1"></i> Acil Alarm Bulgusu Yok`;
+        }
+      }
+
+      const tsEl = document.getElementById("repSynthesisTimestamp");
+      if (tsEl) tsEl.textContent = `Son denetim: ${data.timestamp}`;
+
+      const narrativeEl = document.getElementById("repSynthesisNarrativeText");
+      if (narrativeEl) narrativeEl.innerHTML = data.narrativeHtml;
+
+      const alarmSection = document.getElementById("repSynthesisAlarmSection");
+      const alarmList = document.getElementById("repSynthesisAlarmList");
+      if (alarmSection && alarmList) {
+        if (data.alarms.length > 0) {
+          alarmSection.classList.remove("hidden");
+          alarmList.innerHTML = data.alarms.map(a => {
+            const isCrit = a.level === "critical";
+            return `
+              <div class="p-3 rounded-xl ${isCrit ? "bg-white border-2 border-rose-400" : "bg-amber-50/90 border border-amber-300"} shadow-2xs">
+                <div class="flex items-center justify-between gap-2">
+                  <strong class="font-black ${isCrit ? "text-rose-900" : "text-amber-950"} flex items-center gap-1.5">
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${isCrit ? "bg-rose-600 text-white" : "bg-amber-500 text-white"}">${isCrit ? "KRİTİK ALARM" : "KLİNİK UYARI"}</span>
+                    <span>${escapeHtmlText(a.title)}</span>
+                  </strong>
+                </div>
+                <p class="mt-1 text-[11px] ${isCrit ? "text-rose-900" : "text-amber-900"} leading-relaxed">${escapeHtmlText(a.detail)}</p>
+                <p class="mt-1 text-[11px] font-bold ${isCrit ? "text-rose-950" : "text-amber-950"}"><i class="fa-solid fa-user-doctor mr-1"></i> Hekim Eylem Önerisi: <span class="font-normal">${escapeHtmlText(a.action)}</span></p>
+              </div>
+            `;
+          }).join("");
+        } else {
+          alarmSection.classList.add("hidden");
+          alarmList.innerHTML = "";
+        }
+      }
+
+      const abnCountEl = document.getElementById("repSynthAbnormalLabCount");
+      const abnListEl = document.getElementById("repSynthAbnormalLabList");
+      if (abnCountEl) abnCountEl.textContent = `${data.abnormalLabs.length} Bulgu`;
+      if (abnListEl) {
+        if (data.abnormalLabs.length > 0) {
+          abnListEl.innerHTML = data.abnormalLabs.map(item => {
+            const ev = item.ev || {};
+            const isCrit = ev.isUrgent || ev.isToxic || ev.tier === "critical_low" || ev.tier === "critical_high";
+            const badgeColor = isCrit ? "text-rose-700 bg-rose-50 border-rose-200" : (ev.isHigh || ev.status === "above_ref" ? "text-orange-800 bg-orange-50 border-orange-200" : "text-amber-800 bg-amber-50 border-amber-200");
+            return `
+              <div class="p-2 rounded-lg border ${badgeColor}">
+                <div class="flex items-center justify-between gap-1 font-bold">
+                  <span>${escapeHtmlText(item.label)}</span>
+                  <span class="font-mono">${escapeHtmlText(item.v)} ${escapeHtmlText(item.unit)}</span>
+                </div>
+                <div class="text-[10px] mt-0.5 opacity-90">${escapeHtmlText(ev.statusText || "Referans dışı")} ${item.ref ? `(Ref: ${escapeHtmlText(item.ref)})` : ""}</div>
+              </div>
+            `;
+          }).join("");
+        } else if (data.evaluatedLabs.length > 0) {
+          abnListEl.innerHTML = `<p class="text-emerald-700 font-semibold"><i class="fa-solid fa-circle-check mr-1"></i> Kayıtlı ${data.evaluatedLabs.length} tahlilin tamamı referans sınırları içerisindedir.</p>`;
+        } else {
+          abnListEl.innerHTML = `<p class="text-slate-400 italic">Henüz tahlil verisi girilmemiştir.</p>`;
+        }
+      }
+
+      const symCountEl = document.getElementById("repSynthSymptomCount");
+      const symListEl = document.getElementById("repSynthSymptomCorrelationList");
+      if (symCountEl) symCountEl.textContent = `${data.symptomCorrelations.length} Belirti`;
+      if (symListEl) {
+        if (data.symptomCorrelations.length > 0) {
+          symListEl.innerHTML = data.symptomCorrelations.map(c => {
+            const badge = c.type === "concordant"
+              ? `<span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-900">Tahlille Uyumlu</span>`
+              : (c.type === "discordant"
+                ? `<span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-900">Ayırıcı Tanı</span>`
+                : `<span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">Tetkik Eksik</span>`);
+            return `
+              <div class="p-2 rounded-lg bg-slate-50 border border-slate-200/80">
+                <div class="flex items-center justify-between gap-1 font-bold text-navy-900">
+                  <span>${escapeHtmlText(c.symptom)}</span>
+                  ${badge}
+                </div>
+                <p class="text-[10px] text-slate-600 mt-0.5">${escapeHtmlText(c.detail)}</p>
+              </div>
+            `;
+          }).join("");
+        } else {
+          symListEl.innerHTML = `<p class="text-slate-400 italic">Kayıtlı aktif fiziksel belirti bulunmamaktadır.</p>`;
+        }
+      }
+
+      const intCountEl = document.getElementById("repSynthInteractionCount");
+      const intListEl = document.getElementById("repSynthInteractionList");
+      const totalPharmaItems = data.interactions.length + data.medicationDepletionNotes.length;
+      if (intCountEl) intCountEl.textContent = `${totalPharmaItems} Kayıt`;
+      if (intListEl) {
+        if (totalPharmaItems > 0) {
+          const intHtml = data.interactions.map(i => `
+            <div class="p-2 rounded-lg ${i.severity === "danger" ? "bg-rose-50 border border-rose-200 text-rose-900" : "bg-amber-50 border border-amber-200 text-amber-900"}">
+              <div class="font-bold">${escapeHtmlText(i.title)}</div>
+              <div class="text-[10px] mt-0.5">${escapeHtmlText(i.actionText)}</div>
+            </div>
+          `);
+          const depHtml = data.medicationDepletionNotes.map(n => `
+            <div class="p-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-700">
+              <i class="fa-solid fa-pills text-rose-600 mr-1"></i> ${escapeHtmlText(n)}
+            </div>
+          `);
+          intListEl.innerHTML = [...intHtml, ...depHtml].join("");
+        } else {
+          intListEl.innerHTML = `<p class="text-emerald-700 font-semibold"><i class="fa-solid fa-shield-check mr-1"></i> Aktif ilaç–besin çakışması saptanmadı.</p>`;
+        }
+      }
+
+      const auditNotesEl = document.getElementById("repSynthesisAuditNotes");
+      if (auditNotesEl) {
+        auditNotesEl.innerHTML = data.auditNotes.map(n => `<p>${escapeHtmlText(n)}</p>`).join("");
+      }
+
+      if (showNotification && typeof showToast === "function") {
+        showToast("Klinik Sentez Güncellendi", "Belirti, tahlil ve ilaç etkileşim verileriniz uzman dahiliye kurallarıyla yeniden sentezlendi.", "success");
+      }
+    }
+
+    function copyProfessorSynthesisReport() {
+      const data = state.lastProfessorSynthesis || buildProfessorClinicalSynthesisData();
+      const alarmText = data.alarms.length > 0
+        ? "\n\nKLİNİK ALARM DURUMLARI:\n" + data.alarms.map(a => `- [${a.level === "critical" ? "KRİTİK" : "UYARI"}] ${a.title}: ${a.detail} (${a.action})`).join("\n")
+        : "";
+      const fullText = `VİTATAKİP UZMAN DAHİLİYE KLİNİK SENTEZ ÖN ÖZETİ (${data.timestamp})\n\n${data.plainTextSummary}${alarmText}`;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(fullText).then(() => {
+          showToast("Kopyalandı", "Klinik sentez ön özeti panoya kopyalandı.", "success");
+        }).catch(() => {
+          showToast("Bilgi", "Metin seçilerek kopyalanabilir.", "info");
+        });
+      } else {
+        showToast("Kopyalandı", "Klinik sentez ön özeti hazır.", "success");
+      }
+    }
+
+    function speakProfessorSynthesisReport() {
+      const data = state.lastProfessorSynthesis || buildProfessorClinicalSynthesisData();
+      if (window.TTSVoice && typeof window.TTSVoice.speak === "function") {
+        window.TTSVoice.speak(data.plainTextSummary);
+      } else {
+        showToast("Seslendirme", "Cihaz seslendirme motoru başlatıldı.", "info");
+      }
+    }
+
+    function transferProfessorSynthesisToDoctorNotes() {
+      const data = state.lastProfessorSynthesis || buildProfessorClinicalSynthesisData();
+      const notesInput = document.getElementById("doctorNotesInput");
+      if (!notesInput) return;
+      const alarmLines = data.alarms.length > 0
+        ? "\n[Klinik Alarm Notları]: " + data.alarms.map(a => a.title).join(" | ")
+        : "";
+      const summaryBlock = `[Klinik Sentez Ön Özeti - ${data.timestamp}]\n${data.plainTextSummary}${alarmLines}`;
+      notesInput.value = notesInput.value ? `${notesInput.value}\n\n${summaryBlock}` : summaryBlock;
+      if (typeof saveDoctorNotes === "function") saveDoctorNotes(notesInput.value);
+      notesInput.scrollIntoView({ behavior: "smooth", block: "center" });
+      showToast("Hekim Notuna Aktarıldı", "Yapılandırılmış klinik sentez özeti hekim değerlendirme alanına eklendi.", "success");
+    }
+
+    window.buildProfessorClinicalSynthesisData = buildProfessorClinicalSynthesisData;
+    window.renderProfessorClinicalSynthesis = renderProfessorClinicalSynthesis;
+    window.copyProfessorSynthesisReport = copyProfessorSynthesisReport;
+    window.speakProfessorSynthesisReport = speakProfessorSynthesisReport;
+    window.transferProfessorSynthesisToDoctorNotes = transferProfessorSynthesisToDoctorNotes;
 
     /* ========================================================================= */
     /*   TARAYICI ZAMANLI DOZAJ BİLDİRİMLERİ MOTORU (NOTIFICATION API)           */
     /* ========================================================================= */
     let notificationSchedulerInterval = null;
+
+    function isNotificationPermissionGranted() {
+      const webGranted = ("Notification" in window) && Notification.permission === "granted";
+      let androidGranted = false;
+      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.getNotificationPermissionStatus === "function") {
+        try {
+          androidGranted = window.AndroidVitaBridge.getNotificationPermissionStatus() === "granted";
+        } catch (_) {}
+      }
+      return webGranted || androidGranted;
+    }
 
     function isNotificationEnabled() {
       return safeLocalStorageGetItem("vitatakip_notifications_enabled") === "true";
@@ -194,51 +669,74 @@ function renderReportTab() {
 
     function updateNotificationToggleUI() {
       const btn = document.getElementById("drawerNotifToggleBtn");
-      if (!btn) return;
-
-      const enabled = isNotificationEnabled() && ("Notification" in window) && Notification.permission === "granted";
-      if (enabled) {
-        btn.className = "text-[9px] px-2 py-0.5 rounded font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 transition cursor-pointer";
-        btn.textContent = "Açık (Aktif)";
-      } else {
-        btn.className = "text-[9px] px-2 py-0.5 rounded font-bold bg-slate-700 hover:bg-slate-600 text-slate-300 transition cursor-pointer";
-        btn.textContent = "Kapalı";
+      const enabled = isNotificationEnabled() && isNotificationPermissionGranted();
+      if (btn) {
+        if (enabled) {
+          btn.className = "text-[9px] px-2 py-0.5 rounded font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 transition cursor-pointer";
+          btn.textContent = "Açık (Aktif)";
+        } else {
+          btn.className = "text-[9px] px-2 py-0.5 rounded font-bold bg-slate-700 hover:bg-slate-600 text-slate-300 transition cursor-pointer";
+          btn.textContent = "Kapalı";
+        }
+      }
+      if (typeof window.renderPwaNotificationSmartChecklist === "function") {
+        window.renderPwaNotificationSmartChecklist();
       }
     }
 
     async function toggleBrowserNotifications() {
-      if (!("Notification" in window)) {
+      const hasAndroid = Boolean(window.AndroidVitaBridge && typeof window.AndroidVitaBridge.requestNotificationPermission === "function");
+      if (!("Notification" in window) && !hasAndroid) {
         showToast("Desteklenmiyor", "Tarayıcınız masaüstü bildirimlerini desteklemiyor.", "warning");
         return;
       }
 
-      if (isNotificationEnabled() && Notification.permission === "granted") {
+      if (isNotificationEnabled() && isNotificationPermissionGranted()) {
         safeLocalStorageSetItem("vitatakip_notifications_enabled", "false");
         updateNotificationToggleUI();
         showToast("Bildirimler Kapatıldı", "Zamanlı dozaj bildirimleri devre dışı bırakıldı.", "info");
         return;
       }
 
-      const permission = await Notification.requestPermission();
-      if (permission === "granted") {
+      if (hasAndroid) {
+        try {
+          window.AndroidVitaBridge.requestNotificationPermission();
+        } catch (_) {}
+      }
+
+      let permission = hasAndroid && isNotificationPermissionGranted() ? "granted" : "default";
+      if ("Notification" in window && typeof Notification.requestPermission === "function") {
+        try {
+          permission = await Notification.requestPermission();
+        } catch (_) {}
+      }
+
+      if (permission === "granted" || isNotificationPermissionGranted()) {
         safeLocalStorageSetItem("vitatakip_notifications_enabled", "true");
         updateNotificationToggleUI();
         startNotificationScheduler();
         showToast("Bildirimler Açıldı", "Sayfa açık ve tarayıcı çalışır durumdayken çizelge hatırlatmaları üretilebilir; kapalı arka plan bildirimi garanti edilmez.", "success");
         try {
-          new Notification("VitaTakip Dozaj Hatırlatıcı Aktif", {
-            body: "Çizelgenizde kayıtlı takviye saatlerinde bildirim alacaksınız."
-          });
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("VitaTakip Dozaj Hatırlatıcı Aktif", {
+              body: "Çizelgenizde kayıtlı takviye saatlerinde bildirim alacaksınız."
+            });
+          } else if (hasAndroid && typeof window.AndroidVitaBridge.sendNativeNotification === "function") {
+            window.AndroidVitaBridge.sendNativeNotification(
+              "VitaTakip Dozaj Hatırlatıcı Aktif",
+              "Çizelgenizde kayıtlı takviye saatlerinde bildirim alacaksınız."
+            );
+          }
         } catch (e) {}
       } else {
         safeLocalStorageSetItem("vitatakip_notifications_enabled", "false");
         updateNotificationToggleUI();
-        showToast("İzin Verilmedi", "Bildirim gönderebilmek için tarayıcı izni gereklidir.", "warning");
+        showToast("İzin Verilmedi", "Bildirim gönderebilmek için tarayıcı veya cihaz izni gereklidir.", "warning");
       }
     }
 
     function checkAndFireScheduledNotifications() {
-      if (!isNotificationEnabled() || !("Notification" in window) || Notification.permission !== "granted") return;
+      if (!isNotificationEnabled() || !isNotificationPermissionGranted()) return;
       if (!state.supplements || state.supplements.length === 0) return;
 
       const now = new Date();
@@ -253,10 +751,17 @@ function renderReportTab() {
       if (!pendingItems.length) return;
       safeLocalStorageSetItem(firedKey, "true");
       const names = pendingItems.map(item => `${item.name} (${item.doseText || 'Doz bilgisi yok'})`).join(", ");
+      const notifTitle = `⏰ VitaTakip: ${currentHM} takviye zamanı`;
+      const notifBody = `Çizelgenizdeki takviyeler: ${names}. Kutu/prospektüs ve hekim/eczacı talimatlarına uyun.`;
       try {
-        new Notification(`⏰ VitaTakip: ${currentHM} takviye zamanı`, {
-          body: `Çizelgenizdeki takviyeler: ${names}. Kutu/prospektüs ve hekim/eczacı talimatlarına uyun.`
-        });
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification(notifTitle, {
+            body: notifBody
+          });
+        }
+        if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.sendNativeNotification === "function") {
+          window.AndroidVitaBridge.sendNativeNotification(notifTitle, notifBody);
+        }
       } catch (e) {}
     }
 

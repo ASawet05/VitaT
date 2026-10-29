@@ -1,12 +1,19 @@
 package com.example
 
+import android.Manifest
 import android.annotation.SuppressLint
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.print.PrintAttributes
 import android.print.PrintManager
+import android.provider.Settings
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.MimeTypeMap
@@ -86,6 +93,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import androidx.credentials.CredentialManager
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -113,8 +123,38 @@ import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
 
+import java.io.File
+
+private fun prepareWebViewVariationsDirectory(context: Context) {
+    runCatching {
+        val candidateDirs = listOfNotNull(
+            context.getDir("webview", Context.MODE_PRIVATE),
+            context.applicationInfo?.dataDir?.let { File(it, "app_webview") }
+        ).distinctBy { it.absolutePath }
+
+        val now = System.currentTimeMillis()
+        for (dir in candidateDirs) {
+            if (!dir.exists()) {
+                dir.mkdirs()
+            }
+            listOf("variations_seed", "variations_seed_new", "variations_seed_temp").forEach { fileName ->
+                val seedFile = File(dir, fileName)
+                if (seedFile.exists()) {
+                    seedFile.delete()
+                }
+            }
+            val stampFile = File(dir, "variations_stamp")
+            if (!stampFile.exists()) {
+                stampFile.createNewFile()
+            }
+            stampFile.setLastModified(now)
+        }
+    }
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        prepareWebViewVariationsDirectory(applicationContext)
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
@@ -158,10 +198,66 @@ fun AppNavigation(auth: FirebaseAuth = Firebase.auth) {
     }
 }
 
+const val VITA_NOTIFICATION_CHANNEL_ID = "vitatakip_dosage_channel"
+
+fun ensureVitaNotificationChannel(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+        val existing = manager.getNotificationChannel(VITA_NOTIFICATION_CHANNEL_ID)
+        if (existing == null) {
+            val channel = NotificationChannel(
+                VITA_NOTIFICATION_CHANNEL_ID,
+                "VitaTakip Dozaj ve Sağlık Hatırlatmaları",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Günlük takviye saatleri, ilaç etkileşim uyarıları ve su hedefi hatırlatmaları"
+            }
+            manager.createNotificationChannel(channel)
+        }
+    }
+}
+
+fun queryAndroidNotificationPermissionState(context: Context): String {
+    val managerEnabled = runCatching {
+        NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }.getOrDefault(true)
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        return if (granted && managerEnabled) "granted" else "default"
+    }
+    return if (managerEnabled) "granted" else "denied"
+}
+
+@SuppressLint("MissingPermission")
+fun postVitaSystemNotification(context: Context, title: String, body: String): Boolean {
+    if (queryAndroidNotificationPermissionState(context) != "granted") {
+        return false
+    }
+    return runCatching {
+        ensureVitaNotificationChannel(context)
+        val notification = NotificationCompat.Builder(context, VITA_NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title.ifBlank { "VitaTakip Dozaj Hatırlatıcı" })
+            .setContentText(body.ifBlank { "Günlük protokolünüzdeki takviye saatini kontrol edin." })
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .build()
+        NotificationManagerCompat.from(context)
+            .notify((System.currentTimeMillis() % 100000).toInt(), notification)
+        true
+    }.getOrDefault(false)
+}
+
 private class AndroidVitaBridge(
     private val context: Context,
     private val webViewProvider: () -> WebView?,
-    private val onOpenCloudSyncDialog: () -> Unit
+    private val onOpenCloudSyncDialog: () -> Unit,
+    private val onRequestNotificationPermission: () -> Unit
 ) {
     @JavascriptInterface
     fun printPage() {
@@ -188,6 +284,46 @@ private class AndroidVitaBridge(
         val webView = webViewProvider() ?: return
         webView.post {
             onOpenCloudSyncDialog()
+        }
+    }
+
+    @JavascriptInterface
+    fun getNotificationPermissionStatus(): String {
+        return queryAndroidNotificationPermissionState(context)
+    }
+
+    @JavascriptInterface
+    fun requestNotificationPermission() {
+        val webView = webViewProvider() ?: return
+        webView.post {
+            onRequestNotificationPermission()
+        }
+    }
+
+    @JavascriptInterface
+    fun sendNativeNotification(title: String?, body: String?): Boolean {
+        val safeTitle = title?.takeIf { it.isNotBlank() } ?: "VitaTakip Dozaj Hatırlatıcı"
+        val safeBody = body?.takeIf { it.isNotBlank() } ?: "Günlük protokolünüzdeki takviye zamanı geldi."
+        return postVitaSystemNotification(context, safeTitle, safeBody)
+    }
+
+    @JavascriptInterface
+    fun openAppNotificationSettings() {
+        val webView = webViewProvider() ?: return
+        webView.post {
+            runCatching {
+                val intent = Intent().apply {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
+                        putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    } else {
+                        action = Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+                        data = Uri.fromParts("package", context.packageName, null)
+                    }
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            }
         }
     }
 }
@@ -241,6 +377,16 @@ fun VitaTakipWebPortalScreen(
         }
     }
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        val status = if (isGranted) "granted" else "denied"
+        webViewRef?.evaluateJavascript(
+            "if (window.onAndroidNotificationPermissionResult) { window.onAndroidNotificationPermissionResult('$status'); }",
+            null
+        )
+    }
+
     BackHandler {
         val wv = webViewRef
         if (wv != null) {
@@ -281,6 +427,7 @@ fun VitaTakipWebPortalScreen(
                 .fillMaxSize()
                 .testTag("vita_takip_webview"),
             factory = { ctx ->
+                prepareWebViewVariationsDirectory(ctx)
                 object : WebView(ctx) {
                     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
                         val widthSize = MeasureSpec.getSize(widthMeasureSpec)
@@ -332,7 +479,30 @@ fun VitaTakipWebPortalScreen(
                         AndroidVitaBridge(
                             context = ctx,
                             webViewProvider = { webViewRef },
-                            onOpenCloudSyncDialog = { showCloudSyncDialog = true }
+                            onOpenCloudSyncDialog = { showCloudSyncDialog = true },
+                            onRequestNotificationPermission = {
+                                ensureVitaNotificationChannel(ctx)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    val alreadyGranted = ContextCompat.checkSelfPermission(
+                                        ctx,
+                                        Manifest.permission.POST_NOTIFICATIONS
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                    if (alreadyGranted) {
+                                        webViewRef?.evaluateJavascript(
+                                            "if (window.onAndroidNotificationPermissionResult) { window.onAndroidNotificationPermissionResult('granted'); }",
+                                            null
+                                        )
+                                    } else {
+                                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    }
+                                } else {
+                                    val state = queryAndroidNotificationPermissionState(ctx)
+                                    webViewRef?.evaluateJavascript(
+                                        "if (window.onAndroidNotificationPermissionResult) { window.onAndroidNotificationPermissionResult('$state'); }",
+                                        null
+                                    )
+                                }
+                            }
                         ),
                         "AndroidVitaBridge"
                     )

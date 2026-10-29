@@ -556,9 +556,26 @@ function applyParsedPdfValues() {
       showToast("İlaç Silindi", `"${medName}" ilaç listesinden kaldırıldı.`, "info");
     }
 
+    function toggleMedShieldDrawer(scrollToDrawer = true) {
+      const drawer = document.getElementById("dailyProtocolMedicationsDrawer");
+      if (!drawer) return;
+      drawer.open = !drawer.open;
+      if (drawer.open && scrollToDrawer) {
+        setTimeout(() => {
+          try {
+            drawer.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            const inputEl = document.getElementById("quickAddMedInput");
+            if (inputEl) inputEl.focus({ preventScroll: true });
+          } catch (e) {}
+        }, 60);
+      }
+    }
+
     function renderDailyProtocolMedicationsBar() {
       const chipsContainer = document.getElementById("dailyProtocolQuickMedChips");
       const statusBadge = document.getElementById("dailyProtocolDbStatusBadge");
+      const headerCountBadge = document.getElementById("headerMedShieldCountBadge");
+      const summarySubtext = document.getElementById("medShieldDrawerSummarySubtext");
       if (!chipsContainer || !state.user) return;
 
       const chronicList = Array.isArray(state.user.chronic) ? state.user.chronic : [];
@@ -591,8 +608,20 @@ function applyParsedPdfValues() {
 
       chipsContainer.innerHTML = quickHtml + customHtml;
 
+      const activeCount = chronicList.length + customMeds.length;
+      if (headerCountBadge) {
+        headerCountBadge.textContent = String(activeCount);
+        headerCountBadge.className = activeCount > 0
+          ? "px-1.5 py-0.2 rounded-full bg-rose-600 text-[10px] font-black text-white border border-rose-700"
+          : "px-1.5 py-0.2 rounded-full bg-white text-[10px] font-black text-slate-600 border border-amber-200";
+      }
+      if (summarySubtext) {
+        summarySubtext.textContent = activeCount > 0
+          ? `${activeCount} kayıtlı ilaç/kronik durum aktif olarak takviyelerinizle karşılaştırılıyor. Düzenlemek için dokunun.`
+          : "Kullandığınız reçeteli ilaçları seçmek veya denetlemek için dokunun (Kayıt/Profil bilgilerinizle senkronizedir).";
+      }
+
       if (statusBadge) {
-        const activeCount = chronicList.length + customMeds.length;
         statusBadge.textContent = activeCount > 0
           ? `${activeCount} Aktif İlaç/Durum İzleniyor`
           : "NIH ODS • Lexicomp • TİTCK Aktif";

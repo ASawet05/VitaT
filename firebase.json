@@ -17,5 +17,13 @@
     "ui": {
       "enabled": false
     }
+  },
+  "hosting": {
+    "public": "app/src/main/assets/vita_web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
   }
 }

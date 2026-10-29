@@ -97,8 +97,16 @@ let currentAuthMode = "login";
     }
 
     function isSupplementScheduledToday(item, date = new Date()) {
+      if (!item) return false;
+      const todayIso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      const todayTr = date.toLocaleDateString("tr-TR");
+      if (item.scheduledDate && (item.scheduledDate === todayIso || item.scheduledDate === todayTr)) {
+        return true;
+      }
       const days = item?.scheduleDays;
-      if (!Array.isArray(days) || days.length === 0) return Boolean(item?.legacyDailySchedule); // yeni kayıtlarda gün seçilmediyse çizelgeye dahil etme
+      if (!Array.isArray(days) || days.length === 0) {
+        return item?.explicitlyUnscheduled ? false : true;
+      }
       return days.map(Number).includes(date.getDay());
     }
 
@@ -507,7 +515,7 @@ let currentAuthMode = "login";
         const id = String(item?.id || "");
         const name = String(item?.name || "");
         const instruction = String(item?.instruction || "");
-        return !(item?.isBarcodeSimulation || id.startsWith("sup_barcode_demo_") || /\(örnek kayıt\)/i.test(name) || /demo verisidir|örnek ürün verisidir/i.test(instruction));
+        return !(item?.isBarcodeSimulation || id.startsWith("sup_barcode_demo_") || id.startsWith("sup_essential_") || /\(örnek kayıt\)/i.test(name) || /demo verisidir|örnek ürün verisidir/i.test(instruction));
       });
       return state.supplements.length !== before;
     }

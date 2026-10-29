@@ -383,6 +383,9 @@ function renderDailyTab() {
     function commitManualSupplement() {
       const catalogKey = document.getElementById("modalCatalogSelect").value;
 
+      const nowDate = new Date();
+      const todayIso = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, "0")}-${String(nowDate.getDate()).padStart(2, "0")}`;
+
       if (catalogKey === "custom") {
         const name = document.getElementById("manualSupName").value.trim();
         const timing = document.getElementById("manualSupTiming").value;
@@ -393,7 +396,7 @@ function renderDailyTab() {
           id: `sup_man_${Date.now()}`,
           name, formKey: null, selectedForm: null, timing, doseText: dose,
           subText: "Hekim Tavsiyeli Tanımlama", instruction: "Hekiminizin belirttiği talimatlara uygun alınız.",
-          addedDate: Date.now(), taken: false
+          addedDate: Date.now(), taken: false, scheduleDays: [1, 2, 3, 4, 5, 6, 0], scheduledDate: todayIso
         });
       } else {
         const cfg = FORM_DOSAGE_CONFIG[catalogKey];
@@ -410,13 +413,14 @@ function renderDailyTab() {
           existing.subText = evaluated.subText;
           existing.timing = evaluated.timing;
           existing.instruction = evaluated.instruction;
+          existing.scheduledDate = todayIso;
         } else {
           state.supplements.push({
             id: `sup_cat_${Date.now()}`,
             name: cfg.name, formKey: catalogKey, selectedForm: chosenForm,
             timing: evaluated.timing, doseText: evaluated.doseText,
             subText: evaluated.subText, instruction: evaluated.instruction,
-            addedDate: Date.now(), taken: false, scheduleDays
+            addedDate: Date.now(), taken: false, scheduleDays, scheduledDate: todayIso
           });
         }
       }

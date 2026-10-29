@@ -1,6 +1,6 @@
 /* VitaTakip servis çalışanı: çevrimdışı açılış için uygulama dosyalarını önbelleğe alır.
    Dosyalarda değişiklik yaptığınızda CACHE_VERSION değerini artırın ki kullanıcılar yeni sürümü alsın. */
-const CACHE_VERSION = 'vitatakip-v3';
+const CACHE_VERSION = 'vitatakip-v10';
 const CORE_FILES = [
   "./",
   "index.html",
@@ -18,6 +18,8 @@ const CORE_FILES = [
   "js/lazy-icon-fonts.js",
   "js/neyim-wizard.js",
   "js/neyimvar-final-tidy.js",
+  "js/recharts-lab-dashboard.js",
+  "js/pwa-notification-checklist.js",
   "js/simplify-ui.js",
   "js/sw-register.js",
   "js/ui-enhancements.js",
@@ -61,6 +63,21 @@ self.addEventListener('activate', event => {
     const keys = await caches.keys();
     await Promise.all(keys.filter(k => k.startsWith('vitatakip-') && k !== CACHE_VERSION).map(k => caches.delete(k)));
     await self.clients.claim();
+  })());
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of allClients) {
+      if ('focus' in client) {
+        return client.focus();
+      }
+    }
+    if (self.clients.openWindow) {
+      return self.clients.openWindow('./index.html');
+    }
   })());
 });
 

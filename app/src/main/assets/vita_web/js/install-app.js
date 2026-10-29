@@ -9,7 +9,7 @@
   };
   let deferredPrompt=null, modal=null, returnFocus=null, previousOverflow='', autoHideTimer=null;
 
-  const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true||Boolean(window.VitaAndroidBridge);
+  const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true||Boolean(window.VitaAndroidBridge)||Boolean(window.AndroidVitaBridge);
   const isSecureContextForInstall=()=>window.isSecureContext||location.hostname==='localhost'||location.hostname==='127.0.0.1';
 
   window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;});
@@ -55,7 +55,7 @@
     const note=m.querySelector('#vitaInstallNote');
     if(!isSecureContextForInstall()){
       note.hidden=false;
-      note.innerHTML='<strong>Not:</strong> Yükleme seçeneği HTTPS bir adresten açıldığında görünür.';
+      note.innerHTML='<strong>Not:</strong> Yükleme seçeneği HTTPS bir adresten veya localhost üzerinden açıldığında görünür.';
     } else { note.hidden=true; note.innerHTML=''; }
     document.body.style.overflow='hidden';
     m.hidden=false;
@@ -70,23 +70,40 @@
       try{ await p.prompt(); await p.userChoice; }catch(_){}
       return;
     }
-    openModal('Android\'e yükle','Tarayıcı menüsünden uygulamayı ana ekranınıza ekleyebilirsiniz.',[
-      'Uygulamayı <strong>Chrome</strong> ile açın.',
-      'Sağ üstteki <strong>⋮</strong> menüsüne dokunun.',
+    openModal('Android & Bilgisayar (Web PWA) Kurulumu','Tarayıcı menüsünden VitaTakip\'i telefonunuza veya bilgisayarınıza bağımsız uygulama olarak kurabilirsiniz.',[
+      'Uygulamayı <strong>Chrome</strong> veya <strong>Edge</strong> tarayıcısı ile açın.',
+      'Telefonda sağ üstteki <strong>⋮</strong> menüsüne, bilgisayarda adres çubuğunun sağındaki <strong>Uygulamayı Yükle (⊕)</strong> simgesine tıklayın.',
       '<strong>“Uygulamayı yükle”</strong> veya <strong>“Ana ekrana ekle”</strong> seçeneğini seçin.',
-      '<strong>Yükle</strong> düğmesine dokunun; VitaTakip simgesi ana ekranınıza eklenir.'
+      '<strong>Yükle</strong> düğmesine dokunun; VitaTakip hem çevrimdışı çalışan bir Web uygulaması hem de mobil uygulama olarak cihazınıza eklenir.'
     ],trigger);
   }
   function installIOS(trigger){
     dismissInstallSection(true);
     if(VITA_STORE_LINKS.ios){window.open(VITA_STORE_LINKS.ios,'_blank','noopener');return;}
-    openModal('iPhone / iPad\'e ekle','iOS\'ta uygulama Safari üzerinden ana ekrana eklenir.',[
+    openModal('iPhone / iPad / Mac (Safari) Kurulumu','Apple cihazlarda uygulama Safari üzerinden ana ekrana veya Dock\'a eklenir.',[
       'Uygulamayı <strong>Safari</strong> ile açın.',
-      'Alttaki (iPad\'de üstteki) <strong>Paylaş</strong> simgesine (yukarı oklu kare) dokunun.',
-      'Listeyi kaydırıp <strong>“Ana Ekrana Ekle”</strong> seçeneğine dokunun.',
+      'Alttaki (iPad ve Mac\'te üstteki) <strong>Paylaş</strong> simgesine (yukarı oklu kare) dokunun.',
+      'Listeyi kaydırıp <strong>“Ana Ekrana Ekle”</strong> (Mac\'te <strong>“Dock\'a Ekle”</strong>) seçeneğine dokunun.',
       'Sağ üstteki <strong>Ekle</strong> düğmesine dokunun; VitaTakip simgesi ana ekranınıza eklenir.'
     ],trigger);
   }
+
+  window.openVitaWebMobileInstallModal=async function(trigger){
+    if(deferredPrompt){
+      const p=deferredPrompt; deferredPrompt=null;
+      try{ await p.prompt(); await p.userChoice; return; }catch(_){}
+    }
+    const ua=navigator.userAgent||'';
+    if(/iPad|iPhone|iPod/i.test(ua)){
+      installIOS(trigger);
+      return;
+    }
+    openModal('Web & Mobil Uygulama Kurulumu (PWA + APK)','VitaTakip hibrit mimarisi sayesinde hem Web tarayıcısında (Bilgisayar/Tablet/Telefon) hem de Android Mobil Uygulama olarak çalışır:',[
+      '<strong>Bilgisayar (Chrome / Edge):</strong> Adres çubuğunun sağındaki <strong>Uygulamayı Yükle</strong> simgesine tıklayarak masaüstü uygulaması olarak kurun.',
+      '<strong>Android Telefon (Web PWA veya APK):</strong> Chrome menüsünden (⋮) <strong>“Uygulamayı yükle / Ana ekrana ekle”</strong> seçeneğini kullanın veya doğrudan <strong>Android APK</strong> paketini kurun.',
+      '<strong>iPhone / iPad (Safari):</strong> Paylaş menüsünden <strong>“Ana Ekrana Ekle”</strong> seçeneğine dokunarak tam ekran mobil uygulama olarak kullanın.'
+    ],trigger);
+  };
 
   function dismissInstallSection(markSeen){
     if(autoHideTimer){clearTimeout(autoHideTimer);autoHideTimer=null;}
@@ -109,6 +126,7 @@
   };
 
   window.triggerVitaInstallToastOnce=function(userId){
+    if(isStandalone()) return;
     const section=document.getElementById('vitaInstallSection');
     if(!section)return;
     try{

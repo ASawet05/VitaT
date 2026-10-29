@@ -114,6 +114,23 @@ class ExampleRobolectricTest {
             }
         }
 
+        val viewHomeIdx = indexHtml.indexOf("id=\"view-home\"")
+        val greetingIdx = indexHtml.indexOf("id=\"homeGreetingTime\"")
+        val reminderIdx = indexHtml.indexOf("openClinicalReminder()")
+        val hydrationIdx = indexHtml.indexOf("id=\"homeHydrationText\"")
+        val summaryDrawerIdx = indexHtml.indexOf("id=\"homeDailySummaryDetails\"")
+        val supplementsIdx = indexHtml.indexOf("id=\"supplementChecklistContainer\"")
+        val medShieldDrawerIdx = indexHtml.indexOf("id=\"dailyProtocolMedicationsDrawer\"")
+        val pwaNotifDrawerIdx = indexHtml.indexOf("id=\"pwaNotificationSmartListDrawer\"")
+
+        assertTrue("Greeting must be at the top of view-home", greetingIdx > viewHomeIdx)
+        assertTrue("Clinical reminder must follow greeting", reminderIdx > greetingIdx)
+        assertTrue("Daily hydration target must follow clinical reminder", hydrationIdx > reminderIdx)
+        assertTrue("Daily summary indicators drawer must follow hydration", summaryDrawerIdx > hydrationIdx)
+        assertTrue("Supplements & Pharmaceutical Forms must follow summary drawer", supplementsIdx > summaryDrawerIdx)
+        assertTrue("Drug-Nutrient Shield drawer must follow supplements", medShieldDrawerIdx > supplementsIdx)
+        assertTrue("PWA Notification Checklist drawer must follow Drug-Nutrient Shield", pwaNotifDrawerIdx > medShieldDrawerIdx)
+
         composeTestRule.onNodeWithTag("dashboard_list")
             .performScrollToNode(androidx.compose.ui.test.hasTestTag("daily_protocol_interaction_alert_card"))
         composeTestRule.onNodeWithTag("daily_protocol_interaction_alert_card").assertIsDisplayed()
@@ -123,8 +140,9 @@ class ExampleRobolectricTest {
     fun `verify Recharts multi-line historical blood test dashboard component`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val indexHtml = context.assets.open("vita_web/index.html").bufferedReader().use { it.readText() }
-        assertTrue(indexHtml.contains("dashboardBloodTestChartCard"))
-        assertTrue(indexHtml.contains("rechartsBloodHistoryContainer"))
+        assertTrue(indexHtml.contains("biomarkerChartCard"))
+        assertTrue(indexHtml.contains("labsRechartsMultiLineMount"))
+        assertTrue(indexHtml.contains("dailyProtocolMedicationsDrawer"))
         assertTrue(indexHtml.contains("js/recharts-lab-dashboard.js"))
 
         val rechartsJs = context.assets.open("vita_web/js/recharts-lab-dashboard.js").bufferedReader().use { it.readText() }
@@ -134,24 +152,52 @@ class ExampleRobolectricTest {
 
         composeTestRule.setContent {
             MyApplicationTheme {
-                com.example.ui.screens.VitaDashboardScreen(
+                com.example.ui.screens.VitaAnalyticsScreen(
+                    userEmail = "test@vitatakip.com",
+                    userName = "Test Kullanıcı",
                     supplements = emptyList(),
                     vitalLogs = emptyList(),
                     waterGoalMl = 2500L,
-                    onQuickAddWater = {},
-                    onToggleSupplement = {},
-                    onOpenAddSupplement = {},
-                    onOpenAddVital = {},
-                    onSeedStarterPack = {},
-                    onResetDailyRoutine = {}
+                    onUpdateWaterGoal = {},
+                    onResetDailyRoutine = {},
+                    onSignOut = {}
                 )
             }
         }
 
-        composeTestRule.onNodeWithTag("dashboard_list")
+        composeTestRule.onNodeWithTag("analytics_screen_list")
+            .performScrollToNode(androidx.compose.ui.test.hasTestTag("clinical_synthesis_report_card"))
+        composeTestRule.onNodeWithTag("clinical_synthesis_report_card").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("clinical_synthesis_summary_box").assertExists()
+
+        composeTestRule.onNodeWithTag("analytics_screen_list")
+            .performScrollToNode(androidx.compose.ui.test.hasTestTag("pwa_notification_smart_checklist_card"))
+        composeTestRule.onNodeWithTag("pwa_notification_smart_checklist_card").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("pwa_notif_section_auto_browser_group").assertExists()
+        composeTestRule.onNodeWithTag("pwa_notif_section_auto_sw_group").assertExists()
+
+        composeTestRule.onNodeWithTag("analytics_screen_list")
             .performScrollToNode(androidx.compose.ui.test.hasTestTag("dashboard_blood_test_multiline_chart_card"))
         composeTestRule.onNodeWithTag("dashboard_blood_test_multiline_chart_card").assertIsDisplayed()
         composeTestRule.onNodeWithTag("dashboard_blood_test_multiline_canvas").assertIsDisplayed()
+
+        assertTrue(indexHtml.contains("repProfessorSynthesisWrapper"))
+        assertTrue(indexHtml.contains("repSynthesisNarrativeText"))
+        assertTrue(indexHtml.contains("repSynthesisAlarmSection"))
+        assertTrue(indexHtml.contains("pwaNotificationSmartListDrawer"))
+        assertTrue(indexHtml.contains("pwaNotifSmartChecklistContainer"))
+        assertTrue(indexHtml.contains("js/pwa-notification-checklist.js"))
+
+        val reportJs = context.assets.open("vita_web/js/app/12-report-notifications-ai-chat.js").bufferedReader().use { it.readText() }
+        assertTrue(reportJs.contains("buildProfessorClinicalSynthesisData"))
+        assertTrue(reportJs.contains("renderProfessorClinicalSynthesis"))
+
+        val pwaNotifJs = context.assets.open("vita_web/js/pwa-notification-checklist.js").bufferedReader().use { it.readText() }
+        assertTrue(pwaNotifJs.contains("renderPwaNotificationSmartChecklist"))
+        assertTrue(pwaNotifJs.contains("autoConfigureAllPwaNotifications"))
+        assertTrue(pwaNotifJs.contains("detectBrowserProfile"))
+        assertTrue(pwaNotifJs.contains("getServiceWorkerRegistrationProfile"))
+        assertTrue(pwaNotifJs.contains("groupChecklistItems"))
     }
 }
 

@@ -131,7 +131,7 @@
 <p class="text-[9px] text-slate-400 leading-tight">Gemini anahtarı yalnızca sayfa açıkken bellekte tutulur ve Gemini isteğinde Google'a gönderilir; yenilemede tekrar girilmesi gerekir. Bu tek dosyalı prototipte anahtar güvenli kasada tutulmaz. Gerçek dağıtımda sunucu taraflı API vekili kullanın. Anahtar girilmezse yerel karar motoru çalışır.</p>
 </div>
 <!-- TARAYICI ZAMANLI DOZAJ BİLDİRİMLERİ (NOTIFICATION API TOGGLE) -->
-<div class="p-3 rounded-2xl bg-navy-800/90 border border-slate-700 space-y-1.5 mt-2">
+<div class="p-3 rounded-2xl bg-navy-800/90 border border-slate-700 space-y-2 mt-2">
 <div class="flex items-center justify-between">
 <span class="text-[10px] font-bold text-teal-300 uppercase tracking-wider flex items-center gap-1.5">
 <i class="fa-solid fa-bell text-amber-400"></i> Dozaj Bildirimleri
@@ -141,8 +141,16 @@
             </button>
 </div>
 <p class="text-[9px] text-slate-400 leading-tight">Bu prototip, sayfa açıkken tarayıcı izin veriyorsa seçtiğiniz gün/saatlerde hatırlatma üretir. Sayfa/tarayıcı kapalıyken veya telefon kilitliyken arka plan bildirimi garanti edilmez; bunun için HTTPS üzerinde PWA servis çalışanı ve sunucudan Web Push altyapısı gerekir.</p>
+<button class="w-full py-1.5 px-2.5 rounded-xl bg-navy-950/80 hover:bg-navy-950 border border-slate-700 text-[10px] font-bold text-sky-300 transition flex items-center justify-between cursor-pointer" onclick="closeAppDrawer(); if(window.togglePwaNotificationDrawer) window.togglePwaNotificationDrawer(true)" type="button">
+<span><i class="fa-solid fa-list-check text-teal-400 mr-1.5"></i>PWA Bildirim İzin Listesi</span>
+<span class="text-[9px] px-1.5 py-0.5 rounded font-black bg-amber-500/20 text-amber-300 border border-amber-500/40" id="drawerPwaSmartChecklistBadge">4/6</span>
+</button>
 </div>
 <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 pt-2 py-1">Araçlar &amp; Yedekleme</div>
+<button class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sky-300 hover:bg-navy-800 transition text-left cursor-pointer" onclick="closeAppDrawer(); if(window.openVitaWebMobileInstallModal) window.openVitaWebMobileInstallModal(this)" type="button">
+<i class="fa-solid fa-mobile-screen-button w-5 text-center text-sm"></i>
+<span>Web &amp; Mobil Uygulama Kur (PWA)</span>
+</button>
 <button class="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-amber-300 hover:bg-navy-800 transition text-left cursor-pointer" onclick="closeAppDrawer(); openOnboardingModal()">
 <i class="fa-solid fa-circle-question w-5 text-center text-sm"></i>
 <span>Nasıl Kullanılır? Kılavuz</span>
@@ -337,8 +345,8 @@
 <div class="hidden space-y-3" id="pendingReviewAlertBanner"></div>
 <!-- Çakışma & Biyoyararlanım Emniyet Kalkanı Bildirim Şeridi -->
 <div class="hidden space-y-3" id="conflictShieldAlertBanner"></div>
-<!-- 4'lü Özet Sayaç Kartları -->
-<details class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+<!-- 4'lü Özet Sayaç Kartları (Doğrudan Açık) -->
+<details open class="rounded-2xl border border-slate-200 bg-white shadow-sm" id="homeDailySummaryDetails">
 <summary class="cursor-pointer list-none px-4 py-3 text-xs font-bold text-slate-700 flex items-center justify-between gap-3">
 <span><i class="fa-solid fa-chart-simple mr-2 text-teal-600"></i>Günlük özet göstergeleri</span>
 <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
@@ -389,7 +397,7 @@
 <!-- Ana Çalışma Alanı: Bugünün Listesi ve Yan Bilgiler -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 <div class="lg:col-span-2 space-y-6 vita-hide-in-compact">
-<!-- Bugün Alınması Gereken Takviyeler Kartı -->
+<!-- Bugün Alınması Gereken Takviyeler Kartı (Doğrudan İlk Bakışta Görünür) -->
 <div class="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200/80">
 <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
 <div>
@@ -397,60 +405,96 @@
 <i class="fa-solid fa-clipboard-check text-medTeal-600"></i>
                   Bugün Alınması Gereken Takviyeler &amp; Farmasötik Formlar
                 </h2>
-<p class="text-xs text-slate-500 mt-0.5">Her takviyenin kullanım notunu görmek için yanındaki ünlem simgesine dokunun.</p>
+<p class="text-xs text-slate-500 mt-0.5">Bugünkü takviyelerinizi doğrudan işaretleyin; ilaç etkileşim denetimi için sağdaki ünlem kalkanına veya alt çekmeceye dokunun.</p>
 </div>
-<button class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 transition flex items-center gap-1.5 cursor-pointer self-start sm:self-auto shadow-sm" onclick="if(window.SoundEffects) SoundEffects.playClick(); openAddSupplementModal()">
-<i class="fa-solid fa-plus text-teal-600"></i> Manuel Ekle
-              </button>
+<div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+<button class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 transition flex items-center gap-1.5 cursor-pointer shadow-sm" onclick="if(window.SoundEffects) SoundEffects.playClick(); openAddSupplementModal()">
+<i class="fa-solid fa-plus text-teal-600"></i> <span>Manuel Ekle</span>
+</button>
+<button class="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition flex items-center gap-1.5 cursor-pointer shadow-sm" id="btnQuickMedShieldTrigger" onclick="if(window.SoundEffects) SoundEffects.playClick(); toggleMedShieldDrawer(true)" title="Gerçek Zamanlı İlaç–Besin Etkileşim Kalkanını Aç / İlaç Seç" type="button">
+<i class="fa-solid fa-circle-exclamation text-rose-600"></i>
+<span>İlaç Kalkanı</span>
+<span class="px-1.5 py-0.2 rounded-full bg-white text-[10px] font-black text-rose-700 border border-amber-200" id="headerMedShieldCountBadge">0</span>
+</button>
+<button class="px-3 py-1.5 rounded-xl text-xs font-bold bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-300 transition flex items-center gap-1.5 cursor-pointer shadow-sm" id="btnQuickPwaNotifTrigger" onclick="if(window.SoundEffects) SoundEffects.playClick(); if(window.togglePwaNotificationDrawer) window.togglePwaNotificationDrawer(true)" title="PWA Bildirim İzinlerini Kontrol Eden Akıllı Listeyi Aç" type="button">
+<i class="fa-solid fa-bell text-sky-600"></i>
+<span>Bildirim İzinleri</span>
+<span class="px-1.5 py-0.2 rounded-full bg-white text-[10px] font-black text-sky-800 border border-sky-200" id="headerPwaNotifCountBadge">4/6</span>
+</button>
 </div>
-<!-- Gerçek Zamanlı İlaç-Besin Etkileşim Kontrol Çubuğu (Günlük Protokol İçi) -->
-<div class="mt-3.5 p-3.5 rounded-2xl bg-slate-50/90 border border-slate-200/90 space-y-2.5" id="dailyProtocolMedicationsBar">
-<div class="flex flex-wrap items-center justify-between gap-2">
-<div class="flex items-center gap-2">
-<span class="w-6 h-6 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center text-xs font-black"><i class="fa-solid fa-prescription-bottle-medical"></i></span>
-<div>
-<h3 class="text-xs font-black text-navy-900">Gerçek Zamanlı İlaç–Besin Etkileşim Kalkanı (Klinik Veritabanı)</h3>
-<p class="text-[10px] text-slate-500">Kullandığınız reçeteli ilaçları seçin veya yazın; Günlük Protokoldeki takviyelerle olası emilim/etkileşim riskleri anında denetlensin.</p>
 </div>
+<!-- Günlük Protokol İçi Canlı İlaç-Besin Etkileşim Uyarısı (Yalnızca Çakışma Varsa Görünür) -->
+<div class="hidden mt-3.5" id="dailyProtocolInteractionAlert" role="alert" aria-live="polite"></div>
+<!-- Bugün Alınması Gereken Takviyeler Listesi (Doğrudan Üstte) -->
+<div class="mt-4 space-y-4" id="supplementChecklistContainer"></div>
 </div>
+<!-- Alt Açılır Çekmece: Gerçek Zamanlı İlaç–Besin Etkileşim Kalkanı (En Alt Kısımda, Kalabalık Yapmayan Çekmece) -->
+<details class="rounded-2xl border border-slate-200/90 bg-white shadow-sm overflow-hidden group" id="dailyProtocolMedicationsDrawer">
+<summary class="cursor-pointer list-none p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 hover:bg-slate-50/80 transition select-none">
+<div class="flex items-center gap-3 min-w-0">
+<span class="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 text-rose-600 flex items-center justify-center text-base font-black shrink-0 shadow-xs" id="medShieldDrawerIconBox">
+<i class="fa-solid fa-circle-exclamation"></i>
+</span>
+<div class="min-w-0">
+<div class="flex flex-wrap items-center gap-2">
+<h3 class="text-xs sm:text-sm font-black text-navy-900">Gerçek Zamanlı İlaç–Besin Etkileşim Kalkanı</h3>
 <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200" id="dailyProtocolDbStatusBadge">NIH ODS • Lexicomp • TİTCK Aktif</span>
+</div>
+<p class="text-[11px] text-slate-500 mt-0.5" id="medShieldDrawerSummarySubtext">Kullandığınız reçeteli ilaçları seçmek veya denetlemek için dokunun (Kayıt/Profil bilgilerinizle senkronizedir).</p>
+</div>
+</div>
+<div class="flex items-center gap-2 ml-auto">
+<span class="text-[11px] font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-xl border border-teal-200 transition">
+<i class="fa-solid fa-prescription-bottle-medical mr-1"></i>İlaç Seç / Denetle
+</span>
+<i class="fa-solid fa-chevron-down text-xs text-slate-400 transition-transform duration-200 group-open:rotate-180"></i>
+</div>
+</summary>
+<div class="p-4 sm:p-5 pt-3.5 border-t border-slate-100 bg-slate-50/80 space-y-3" id="dailyProtocolMedicationsBar">
+<div class="flex flex-wrap items-center justify-between gap-2">
+<p class="text-[11px] text-slate-600 leading-relaxed">
+<i class="fa-solid fa-shield-halved text-teal-600 mr-1"></i>
+<strong>Klinik Etkileşim Denetimi:</strong> Kayıt olurken veya buradan seçtiğiniz reçeteli ilaçlar, Günlük Protokoldeki takviyelerinizle (Demir, Kalsiyum, Magnezyum, D3/K2, B12, Çinko vb.) anında karşılaştırılır.
+</p>
+<button class="text-[11px] font-bold text-teal-700 hover:text-teal-900 underline cursor-pointer shrink-0" onclick="if(window.SoundEffects) SoundEffects.playClick(); openProfileModal(true)" type="button">
+<i class="fa-solid fa-user-pen mr-1"></i>Profilde Düzenle
+</button>
 </div>
 <div class="flex flex-wrap gap-1.5 pt-0.5" id="dailyProtocolQuickMedChips"></div>
 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
 <div class="relative flex-1">
-<input class="w-full px-3 py-1.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold text-navy-900 focus:outline-none focus:border-teal-500" id="quickAddMedInput" onkeydown="if(event.key==='Enter'){event.preventDefault(); addQuickMedicationFromInput();}" placeholder="Reçeteli ilaç adı ekle (Örn: Euthyrox, Coumadin, Pantpas, Glucophage, Cipro, Fosamax...)" type="text"/>
+<input class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-semibold text-navy-900 focus:outline-none focus:border-teal-500" id="quickAddMedInput" onkeydown="if(event.key==='Enter'){event.preventDefault(); addQuickMedicationFromInput();}" placeholder="Reçeteli ilaç adı ekle (Örn: Euthyrox, Coumadin, Pantpas, Glucophage, Cipro, Fosamax...)" type="text"/>
 </div>
-<button class="px-3 py-1.5 rounded-xl bg-navy-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0" onclick="if(window.SoundEffects) SoundEffects.playClick(); addQuickMedicationFromInput()" type="button">
+<button class="px-3.5 py-2 rounded-xl bg-navy-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0" onclick="if(window.SoundEffects) SoundEffects.playClick(); addQuickMedicationFromInput()" type="button">
 <i class="fa-solid fa-shield-heart text-teal-300"></i> İlaç Ekle &amp; Denetle
 </button>
 </div>
 </div>
-<!-- Günlük Protokol İçi Canlı İlaç-Besin Etkileşim Uyarısı -->
-<div class="hidden mt-3.5" id="dailyProtocolInteractionAlert" role="alert" aria-live="polite"></div>
-<div class="mt-4 space-y-4" id="supplementChecklistContainer"></div>
+</details>
+<!-- Alt Açılır Çekmece 2: PWA Bildirim İzinlerini Kontrol Eden Akıllı Liste Bileşeni -->
+<details class="rounded-2xl border border-slate-200/90 bg-white shadow-sm overflow-hidden group" id="pwaNotificationSmartListDrawer">
+<summary class="cursor-pointer list-none p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 hover:bg-slate-50/80 transition select-none">
+<div class="flex items-center gap-3 min-w-0">
+<span class="w-10 h-10 rounded-2xl bg-sky-50 border border-sky-200 text-sky-600 flex items-center justify-center text-base font-black shrink-0 shadow-xs" id="pwaNotifDrawerIconBox">
+<i class="fa-solid fa-bell"></i>
+</span>
+<div class="min-w-0">
+<div class="flex flex-wrap items-center gap-2">
+<h3 class="text-xs sm:text-sm font-black text-navy-900">PWA Bildirim İzinleri &amp; Hatırlatıcı Akıllı Kontrol Listesi</h3>
+<span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200" id="pwaNotifDrawerStatusBadge">Denetleniyor</span>
 </div>
-<!-- Recharts Çoklu Çizgi Kan Tahlili Gelişim Grafiği (Multi-Line Blood Test Progress Dashboard) -->
-<div class="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200/80 space-y-4" id="dashboardBloodTestChartCard" data-testid="recharts-blood-history-dashboard">
-<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-<div>
-<div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 text-[10px] font-black mb-1">
-<i class="fa-solid fa-chart-line text-teal-600"></i>
-<span>Recharts Multi-Line • Zaman Serisi Takibi</span>
-</div>
-<h2 class="text-base font-bold text-navy-900 flex items-center gap-2">
-<span>Kan Tahlili Geçmişi &amp; Çoklu Biyobelirteç Gelişim Grafiği</span>
-</h2>
-<p class="text-xs text-slate-500 mt-0.5">Geçmiş kan tahlili sonuçlarınızı çoklu çizgi (multi-line) grafik üzerinde karşılaştırarak zaman içindeki gelişiminizi izleyin.</p>
-</div>
-<div class="flex items-center gap-2 self-start sm:self-auto">
-<button class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 transition flex items-center gap-1.5 cursor-pointer shadow-xs" onclick="if(window.SoundEffects) SoundEffects.playClick(); navigateToView('view-labs')" type="button">
-<i class="fa-solid fa-flask-vial text-teal-600"></i>
-<span>Tahlil Ekle / Düzenle</span>
-</button>
+<p class="text-[11px] text-slate-500 mt-0.5" id="pwaNotifDrawerSummarySubtext">Tarayıcı Notification API, Service Worker, HTTPS ve mobil bildirim izinlerini tek listeden kontrol edin.</p>
 </div>
 </div>
-<div id="rechartsBloodHistoryContainer" class="w-full"></div>
+<div class="flex items-center gap-2 ml-auto">
+<span class="text-[11px] font-bold text-sky-800 bg-sky-50 px-2.5 py-1 rounded-xl border border-sky-200 transition">
+<i class="fa-solid fa-list-check mr-1"></i>İzinleri Denetle
+</span>
+<i class="fa-solid fa-chevron-down text-xs text-slate-400 transition-transform duration-200 group-open:rotate-180"></i>
 </div>
+</summary>
+<div class="p-4 sm:p-5 pt-3.5 border-t border-slate-100 bg-slate-50/80 space-y-3" id="pwaNotifSmartChecklistContainer"></div>
+</details>
 </div>
 <!-- Sağ Sütun: Emilim, Hidrasyon & Aktif Profil -->
 <details class="space-y-4 rounded-2xl border border-slate-200 bg-white p-4">
@@ -1362,6 +1406,124 @@
 <strong class="text-rose-700 text-xs sm:text-sm block truncate" id="repPatientChronic">-</strong>
 </div>
 </div>
+<!-- UZMAN DAHİLİYE HEKİMİ & PROFESÖR DOKTOR DENETİMLİ KLİNİK SENTEZ RAPORU OLUŞTURUCU BİLEŞENİ -->
+<div class="w-full rounded-2xl border-2 border-teal-600/30 bg-gradient-to-br from-slate-50 via-white to-teal-50/40 p-4 sm:p-5 shadow-sm space-y-4" id="repProfessorSynthesisWrapper">
+  <div class="flex flex-col md:flex-row md:items-start justify-between gap-3 border-b border-slate-200/90 pb-3.5">
+    <div class="flex items-start gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-navy-900 via-teal-800 to-emerald-700 text-white flex items-center justify-center text-base shadow-sm flex-shrink-0">
+        <i class="fa-solid fa-user-doctor"></i>
+      </div>
+      <div>
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-navy-900 text-teal-300 border border-teal-500/40">
+            İç Hastalıkları &amp; Klinik Biyokimya Denetimli
+          </span>
+          <span class="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300" id="repSynthesisTriajeBadge">
+            Sentez Hazır
+          </span>
+        </div>
+        <h3 class="text-sm sm:text-base font-black text-navy-900 mt-1" id="repSynthesisTitle">
+          Uzman Dahiliye Hekimi Gözüyle Klinik Sentez &amp; Alarm Denetim Raporu
+        </h3>
+        <p class="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+          Hastanın aktif belirtilerini, referans dışı/sınırda tahlil sonuçlarını ve kronik ilaç–besin etkileşimlerini birleştirerek hekim konsültasyonu için "alarm" durumlarını vurgulayan yapılandırılmış ön özet sunar.
+        </p>
+      </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-1.5 no-print shrink-0">
+      <button class="px-3 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-black text-[11px] shadow-sm transition flex items-center gap-1.5 cursor-pointer" id="btnRegenerateProfessorSynthesis" onclick="if(window.SoundEffects) SoundEffects.playClick(); renderProfessorClinicalSynthesis(true)" type="button" title="Güncel belirti, tahlil ve ilaç verileriyle klinik sentezi yeniden oluştur">
+        <i class="fa-solid fa-wand-magic-sparkles"></i>
+        <span>Sentezi Oluştur / Güncelle</span>
+      </button>
+      <button class="px-2.5 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-[11px] transition flex items-center gap-1 cursor-pointer" id="btnCopyProfessorSynthesis" onclick="if(window.SoundEffects) SoundEffects.playClick(); copyProfessorSynthesisReport()" type="button" title="Yapılandırılmış ön özet metnini panoya kopyala">
+        <i class="fa-solid fa-copy text-teal-700"></i>
+        <span>Ön Özeti Kopyala</span>
+      </button>
+      <button class="px-2.5 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold text-[11px] transition flex items-center gap-1 cursor-pointer" id="btnSpeakProfessorSynthesis" onclick="if(window.SoundEffects) SoundEffects.playClick(); speakProfessorSynthesisReport()" type="button" title="Klinik sentez ön özetini sesli dinle">
+        <i class="fa-solid fa-volume-high text-indigo-600"></i>
+        <span>Seslendir</span>
+      </button>
+      <button class="px-2.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[11px] transition flex items-center gap-1 cursor-pointer" id="btnTransferSynthesisToNotes" onclick="if(window.SoundEffects) SoundEffects.playClick(); transferProfessorSynthesisToDoctorNotes()" type="button" title="Yapılandırılmış klinik özeti aşağıdaki hekim değerlendirme notu alanına aktar">
+        <i class="fa-solid fa-file-import text-amber-700"></i>
+        <span>Hekim Notuna Aktar</span>
+      </button>
+    </div>
+  </div>
+  <!-- Pre-Analitik & Fizyolojik Bağlam Denetim Filtreleri (Hata Payı Önleyici) -->
+  <div class="rounded-xl bg-slate-100/80 border border-slate-200/90 p-3 no-print">
+    <div class="text-[10px] font-black uppercase tracking-wider text-slate-600 mb-2 flex items-center gap-1.5">
+      <i class="fa-solid fa-sliders text-teal-700"></i>
+      <span>Pre-Analitik ve Fizyolojik Yorum Doğrulama Parametreleri (İsteğe Bağlı Hassas Ayar)</span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+      <label class="flex items-start gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-teal-400 transition">
+        <input class="mt-0.5 rounded border-slate-300 text-teal-700 focus:ring-teal-500" id="repSynthRecentSupplementUse" onchange="renderProfessorClinicalSynthesis(false)" type="checkbox"/>
+        <span class="text-slate-700 leading-snug"><strong class="text-navy-900">Son 3 ayda aktif takviye kullanımı:</strong> Yüksek B12/D3/Ferritin sonuçlarında iatrojenik (takviye kaynaklı) artışı ayırt eder.</span>
+      </label>
+      <label class="flex items-start gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-teal-400 transition">
+        <input class="mt-0.5 rounded border-slate-300 text-teal-700 focus:ring-teal-500" id="repSynthPregnancyContext" onchange="renderProfessorClinicalSynthesis(false)" type="checkbox"/>
+        <span class="text-slate-700 leading-snug"><strong class="text-navy-900">Gebelik / Laktasyon fizyolojisi:</strong> Dilüsyonel Hb (&lt;11 g/dL) ve gebelik kreatinin (&gt;0,85 mg/dL) alarm eşiklerini uygular.</span>
+      </label>
+      <label class="flex items-start gap-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-teal-400 transition">
+        <input class="mt-0.5 rounded border-slate-300 text-teal-700 focus:ring-teal-500" id="repSynthBiotinContext" onchange="renderProfessorClinicalSynthesis(false)" type="checkbox"/>
+        <span class="text-slate-700 leading-snug"><strong class="text-navy-900">Son 72 saatte Biotin (B7) alımı:</strong> Streptavidin-biotin immünoassay sahte yükseklik interferansı uyarısını etkinleştirir.</span>
+      </label>
+    </div>
+  </div>
+  <!-- 1. Yapılandırılmış Profesör Doktor Ön Özet Metni (Epikriz / Konsültasyon Formatı) -->
+  <div class="rounded-xl bg-white border border-teal-200/90 p-3.5 sm:p-4 shadow-xs space-y-2.5" id="repSynthesisNarrativeBox">
+    <div class="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+      <span class="text-xs font-black text-navy-900 flex items-center gap-1.5">
+        <i class="fa-solid fa-file-medical text-teal-700"></i>
+        <span>Yapılandırılmış Hekim Konsültasyon Ön Özet Metni (Profesör Doktor Perspektifi)</span>
+      </span>
+      <span class="text-[10px] font-semibold text-slate-400" id="repSynthesisTimestamp">—</span>
+    </div>
+    <div class="text-xs text-slate-800 leading-relaxed space-y-2" id="repSynthesisNarrativeText">
+      <p class="text-slate-400 italic">Klinik sentez raporu hazırlanıyor...</p>
+    </div>
+  </div>
+  <!-- 2. Klinik "Alarm" (Kırmızı Bayrak & Kritik Değer) Denetim Kutusu -->
+  <div class="hidden rounded-xl border-2 border-rose-300 bg-rose-50/80 p-3.5 sm:p-4 space-y-2" id="repSynthesisAlarmSection">
+    <div class="text-xs font-black text-rose-950 flex items-center gap-1.5">
+      <i class="fa-solid fa-triangle-exclamation text-rose-600"></i>
+      <span>Klinik "Alarm" Durumları, Kritik Eşikler ve Kırmızı Bayrak Denetimi</span>
+    </div>
+    <div class="space-y-2 text-xs" id="repSynthesisAlarmList"></div>
+  </div>
+  <!-- 3. Üç Sütunlu Entegre Sentez Özeti: Referans Dışı Tahliller | Belirti-Biyobelirteç Uyumu | İlaç & Etkileşim Kalkanı -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+    <div class="rounded-xl bg-white border border-slate-200 p-3 space-y-2">
+      <div class="text-[11px] font-black text-navy-900 flex items-center justify-between gap-1">
+        <span class="flex items-center gap-1.5"><i class="fa-solid fa-vial-circle-check text-amber-600"></i> Referans Dışı &amp; Sınırda Tahliller</span>
+        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200" id="repSynthAbnormalLabCount">0</span>
+      </div>
+      <div class="text-[11px] text-slate-700 space-y-1.5 leading-snug" id="repSynthAbnormalLabList"></div>
+    </div>
+    <div class="rounded-xl bg-white border border-slate-200 p-3 space-y-2">
+      <div class="text-[11px] font-black text-navy-900 flex items-center justify-between gap-1">
+        <span class="flex items-center gap-1.5"><i class="fa-solid fa-stethoscope text-indigo-600"></i> Belirti – Tahlil Klinik Korelasyonu</span>
+        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 border border-indigo-200" id="repSynthSymptomCount">0</span>
+      </div>
+      <div class="text-[11px] text-slate-700 space-y-1.5 leading-snug" id="repSynthSymptomCorrelationList"></div>
+    </div>
+    <div class="rounded-xl bg-white border border-slate-200 p-3 space-y-2">
+      <div class="text-[11px] font-black text-navy-900 flex items-center justify-between gap-1">
+        <span class="flex items-center gap-1.5"><i class="fa-solid fa-shield-halved text-rose-600"></i> Kronik İlaç &amp; Etkileşim Kalkanı</span>
+        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200" id="repSynthInteractionCount">0</span>
+      </div>
+      <div class="text-[11px] text-slate-700 space-y-1.5 leading-snug" id="repSynthInteractionList"></div>
+    </div>
+  </div>
+  <!-- 4. Eksik Bilgilendirme Önleyici & Ayırıcı Tanı Doğrulama Notu -->
+  <div class="rounded-xl bg-amber-50/70 border border-amber-200/90 p-3 text-[11px] text-amber-950 space-y-1" id="repSynthesisAuditNoteBox">
+    <div class="font-black flex items-center gap-1.5">
+      <i class="fa-solid fa-microscope text-amber-700"></i>
+      <span>Biyolojik Referans Aralığı &amp; Hata Payı Denetim Notu (Hekim Görüşmesi İçin Önerilen Doğrulamalar)</span>
+    </div>
+    <div class="text-amber-900 leading-relaxed" id="repSynthesisAuditNotes"></div>
+  </div>
+</div>
 <!-- HASTA ANAMNEZİ & FİZİKSEL KLİNİK BELİRTİLER TABLOSU -->
 <div class="hidden w-full" id="repAnamnesisWrapper">
 <h3 class="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center gap-1.5">
@@ -1396,6 +1558,7 @@
 <th class="p-2">Test</th>
 <th class="p-2">Sonuç</th>
 <th class="p-2">Laboratuvar referansı</th>
+<th class="p-2">Klinik Yorum &amp; Durum</th>
 </tr>
 </thead>
 <tbody class="divide-y divide-slate-100" id="repLabTableBody"></tbody>
@@ -2087,54 +2250,63 @@
 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label class="mb-1 block text-[10px] font-bold text-slate-700" for="modalFishPerWeek">Haftalık balık tüketimi</label><select class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-[11px]" id="modalFishPerWeek" onchange="saveProfileDraft()"><option value="unspecified">Seçilmedi</option><option value="0">Hiç</option><option value="1">1 kez</option><option value="2-3">2–3 kez</option><option value="4+">4 veya daha fazla</option></select></div><div><label class="mb-1 block text-[10px] font-bold text-slate-700" for="modalRedMeatPerWeek">Haftalık kırmızı et tüketimi</label><select class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-[11px]" id="modalRedMeatPerWeek" onchange="saveProfileDraft()"><option value="unspecified">Seçilmedi</option><option value="0">Hiç</option><option value="1">1 kez</option><option value="2-3">2–3 kez</option><option value="4+">4 veya daha fazla</option></select></div></div>
 <div><label class="mb-1 block text-[10px] font-bold text-slate-700" for="modalSunExposure">Ortalama günlük güneşlenme süresi</label><select class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-[11px]" id="modalSunExposure" onchange="saveProfileDraft()"><option value="unspecified">Seçilmedi</option><option value="lt10">10 dakikadan az</option><option value="10-20">10–20 dakika</option><option value="20-30">20–30 dakika</option><option value="gt30">30 dakikadan fazla</option></select><p class="mt-1 text-[9px] text-slate-500">Güneşlenme tek başına D vitamini düzeyini göstermez; cilt, mevsim, saat ve korunma davranışı da etkiler.</p></div>
 </div>
+<div class="p-3.5 rounded-2xl bg-rose-50/40 border border-rose-200/80 space-y-2.5">
+<div class="flex items-start justify-between gap-2">
 <div>
-<label class="font-bold text-slate-700 block mb-1.5">Kronik Durumlar &amp; Düzenli Reçeteli İlaçlar</label>
+<label class="font-black text-navy-900 block text-xs flex items-center gap-1.5">
+<i class="fa-solid fa-shield-heart text-rose-600"></i>
+<span>Gerçek Zamanlı İlaç–Besin Etkileşim Kalkanı (Kayıt &amp; İlaç Güvenliği)</span>
+</label>
+<p class="text-[10px] text-slate-600 mt-0.5 leading-relaxed">Kullandığınız düzenli reçeteli ilaçları veya kronik durumları şimdi seçin; ana sayfada kalabalık yapmadan arka planda takviyelerinizle olası etkileşimler otomatik denetlensin.</p>
+</div>
+<span class="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-white text-rose-700 border border-rose-200 shrink-0">Klinik Kalkan</span>
+</div>
 <div class="space-y-2">
-<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer">
 <input class="rounded text-teal-600 focus:ring-teal-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="kidney"/>
 <span>Kronik Böbrek Rahatsızlığı / GFR Düşüklüğü</span>
 </label>
-<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer">
 <input class="rounded text-teal-600 focus:ring-teal-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="hypertension"/>
 <span>Hipertansiyon / Yüksek Tansiyon</span>
 </label>
-<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer">
 <input class="rounded text-teal-600 focus:ring-teal-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="blood_thinner"/>
 <span>Kan Sulandırıcı İlaç (Coumadin, Aspirin vb.)</span>
 </label>
-<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer">
 <input class="rounded text-teal-600 focus:ring-teal-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="diabetes"/>
 <span>Diyabet / İnsülin Direnci</span>
 </label>
-<label class="flex items-center gap-2 p-2 rounded-lg border border-amber-200 bg-amber-50/50 hover:bg-amber-100/50 cursor-pointer">
+<label class="flex items-center gap-2 p-2 rounded-lg border border-amber-200 bg-amber-50/70 hover:bg-amber-100/60 cursor-pointer">
 <input class="rounded text-amber-600 focus:ring-amber-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="ppi"/>
-<span class="font-semibold text-amber-950">Mide Koruyucu / PPI (Omeprazol, Lansoprazol vb.)</span>
+<span class="font-semibold text-amber-950">Mide Koruyucu / PPI (Omeprazol, Lansoprazol, Pantpas vb.)</span>
 </label>
-<label class="flex items-center gap-2 p-2 rounded-lg border border-sky-200 bg-sky-50/50 hover:bg-sky-100/50 cursor-pointer">
+<label class="flex items-center gap-2 p-2 rounded-lg border border-sky-200 bg-sky-50/70 hover:bg-sky-100/60 cursor-pointer">
 <input class="rounded text-sky-600 focus:ring-sky-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="metformin"/>
-<span class="font-semibold text-sky-950">Metformin (Diyabet / İnsülin Direnci İlacı)</span>
+<span class="font-semibold text-sky-950">Metformin (Diyabet / İnsülin Direnci İlacı - Glucophage vb.)</span>
 </label>
-<label class="flex items-center gap-2 p-2 rounded-lg border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100/50 cursor-pointer">
+<label class="flex items-center gap-2 p-2 rounded-lg border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100/60 cursor-pointer">
 <input class="rounded text-indigo-600 focus:ring-indigo-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="diuretic"/>
 <span class="font-semibold text-indigo-950">Tansiyon Diüretikleri (İdrar Söktürücü Tansiyon İlacı)</span>
 </label>
-<label class="flex items-center gap-2 p-2 rounded-lg border border-purple-200 bg-purple-50/50 hover:bg-purple-100/50 cursor-pointer">
+<label class="flex items-center gap-2 p-2 rounded-lg border border-purple-200 bg-purple-50/70 hover:bg-purple-100/60 cursor-pointer">
 <input class="rounded text-purple-600 focus:ring-purple-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="levothyroxine"/>
 <span class="font-semibold text-purple-950">Tiroid Hormon İlacı (Levotiroksin / Euthyrox / Levotiron)</span>
 </label>
-<label class="flex items-center gap-2 p-2 rounded-lg border border-rose-200 bg-rose-50/50 hover:bg-rose-100/50 cursor-pointer">
+<label class="flex items-center gap-2 p-2 rounded-lg border border-rose-200 bg-rose-50/70 hover:bg-rose-100/60 cursor-pointer">
 <input class="rounded text-rose-600 focus:ring-rose-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="antibiotic"/>
 <span class="font-semibold text-rose-950">Kinolon / Tetrasiklin Grubu Antibiyotik (Siprofloksasin, Doksisiklin vb.)</span>
 </label>
-<label class="flex items-center gap-2 p-2 rounded-lg border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100/50 cursor-pointer">
+<label class="flex items-center gap-2 p-2 rounded-lg border border-emerald-200 bg-emerald-50/70 hover:bg-emerald-100/60 cursor-pointer">
 <input class="rounded text-emerald-600 focus:ring-emerald-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="bisphosphonate"/>
-<span class="font-semibold text-emerald-950">Bisfosfonat / Kemik Erimesi İlacı (Alendronat, Risedronat vb.)</span>
+<span class="font-semibold text-emerald-950">Bisfosfonat / Kemik Erimesi İlacı (Alendronat, Risedronat, Fosamax vb.)</span>
 </label>
 <div class="pt-1">
-<label class="text-[11px] font-bold text-slate-700 block mb-1" for="modalCustomMedications">Diğer Düzenli İlaçlarınız (Virgülle Ayırarak Yazabilirsiniz)</label>
-<input class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:border-teal-500 bg-white" id="modalCustomMedications" oninput="if(this.value.trim() && document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" placeholder="Örn: Euthyrox, Coumadin, Pantpas, Glucophage..." type="text"/>
+<label class="text-[11px] font-bold text-slate-700 block mb-1" for="modalCustomMedications">Diğer Düzenli Reçeteli İlaçlarınız (Virgülle Ayırarak Yazabilirsiniz)</label>
+<input class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:border-teal-500 bg-white" id="modalCustomMedications" oninput="if(this.value.trim() && document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" placeholder="Örn: Euthyrox, Coumadin, Pantpas, Glucophage, Cipro..." type="text"/>
 </div>
-<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 hover:bg-slate-50 cursor-pointer">
+<label class="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer">
 <input class="rounded text-teal-600 focus:ring-teal-500" id="modalChronicNone" name="modal_chronic_none" onchange="toggleModalChronicNone(this)" type="checkbox" value="none"/>
 <span class="font-bold text-teal-800">Düzenli ilaç kullanmıyorum &amp; Bilinen bir kronik rahatsızlığım yok</span>
 </label>
@@ -2338,6 +2510,7 @@
 <script src="js/app/17-lab-insights.js"></script>
 <script src="js/app/18-food-alternatives.js"></script>
 <script src="js/recharts-lab-dashboard.js"></script>
+<script src="js/pwa-notification-checklist.js"></script>
 <script src="js/app/19-app-startup.js"></script>
 <!-- İnteraktif Spotlight Tur Katmanı -->
 <div aria-label="VitaTakip adım adım kullanım turu" aria-live="polite" class="hidden no-print" id="vitaSpotlightLayer">

@@ -117,6 +117,7 @@
         ferritin(v, ctx) {
           const female = ctx.gender !== "E";
           const inflamed = ctx.crp !== null && ctx.crp !== undefined && ctx.crp > 5;
+          if (v >= 1000) return { level: "urgent", side: "high", sources: ["WHO2020_FERR"], text: "Ferritin 1000 ng/mL ve üzerinde: ciddi demir yüklenmesi (hemokromatozis), karaciğer patolojisi veya belirgin sistemik enflamasyon açısından gecikmeden uzman dahiliye/hematoloji değerlendirmesi gerekir. Demir takviyesi kesinlikle kullanmayın." };
           if (v > 500) return { level: "high_review", sources: ["WHO2020_FERR"], text: "Ferritin 500 ng/mL üzerinde: WHO, sağlıksız bireylerde bu düzeyi demir yüklenmesi veya başka bir hastalık açısından ek değerlendirme gerektiren bir sınır olarak tanımlar. Demir takviyesi kullanmayın; hekime başvurun." };
           if (v > (female ? 150 : 200)) return { level: "high_review", sources: ["WHO2020_FERR"], text: `Ferritin ${female ? "150" : "200"} ng/mL üzerinde: sağlıklı bireylerde demir yüklenmesi riski eşiği. Enflamasyon, karaciğer hastalığı ve alkol de ferritini yükseltir; tek başına demir fazlası göstermez. Demir takviyesinden önce hekime danışın.` };
           if (v < 15) return { level: "low_likely", sources: ["WHO2020_FERR"], text: "Ferritin 15 ng/mL altında: WHO'ya göre sağlıklı yetişkinde demir eksikliğini gösterir. Hemoglobin, MCV ve nedenin (adet kanaması, beslenme, sindirim kaybı) hekimce değerlendirilmesi gerekir." };
@@ -134,6 +135,8 @@
         },
         hb(v, ctx) {
           const limit = ctx.gender === "E" ? 13 : 12;
+          if (v < 8.5) return { level: "urgent", side: "low", sources: ["WHO2011_HB"], text: "Hemoglobin 8,5 g/dL altında: belirgin/ağır anemi düzeyi. Doku oksijenlenmesi ve kardiyovasküler yük açısından gecikmeden yüz yüze dahiliye/hematoloji değerlendirmesi gerekir." };
+          if (v > 18.5) return { level: "urgent", side: "high", sources: ["WHO2011_HB"], text: "Hemoglobin 18,5 g/dL üzerinde: belirgin eritrositoz/polisitemi eğilimi. Kan viskozitesi ve altta yatan nedenler açısından gecikmeden hekim değerlendirmesi gerekir." };
           if (v < limit) return { level: "low_likely", sources: ["WHO2011_HB"], text: `Hemoglobin ${limit} g/dL altında: WHO ölçütüne göre anemi ile uyumlu (gebelikte sınır 11 g/dL'dir). Nedeni (demir, B12, folat, kronik hastalık, kanama) hekimce araştırılmalıdır.` };
           return { level: "adequate", sources: ["WHO2011_HB"], text: "" };
         },

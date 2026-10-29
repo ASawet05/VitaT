@@ -7,7 +7,12 @@
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "browser"
+  ],
+  "orientation": "any",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
   "categories": [

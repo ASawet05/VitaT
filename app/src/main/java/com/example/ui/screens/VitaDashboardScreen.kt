@@ -248,13 +248,6 @@ fun VitaDashboardScreen(
         }
 
         item {
-            BloodTestMultiLineDashboardCard(
-                entries = BloodTestTrendCatalog.defaultHistoricalSeries,
-                biomarkers = BloodTestTrendCatalog.biomarkers
-            )
-        }
-
-        item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

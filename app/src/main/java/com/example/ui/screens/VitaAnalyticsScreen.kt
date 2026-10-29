@@ -77,6 +77,26 @@ fun VitaAnalyticsScreen(
             )
         }
 
+        item {
+            ClinicalSynthesisReportCard(
+                supplements = supplements,
+                bloodEntries = com.example.data.model.BloodTestTrendCatalog.defaultHistoricalSeries
+            )
+        }
+
+        item {
+            PwaNotificationSmartChecklistCard(
+                supplements = supplements
+            )
+        }
+
+        item {
+            BloodTestMultiLineDashboardCard(
+                entries = com.example.data.model.BloodTestTrendCatalog.defaultHistoricalSeries,
+                biomarkers = com.example.data.model.BloodTestTrendCatalog.biomarkers
+            )
+        }
+
         // Category breakdown card
         item {
             Card(
