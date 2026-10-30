@@ -29,11 +29,13 @@
       body {
         background: white !important;
         color: #0f172a !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
       }
       .no-print {
         display: none !important;
       }
-      #view-home, #view-labs, #view-neyim, #view-clinical-results, #authModal, #normalityPopupModal, #deprescribingModal, #eNabizModal, #profileModal, #addSupplementModal, #symptomReviewModal, #onboardingModal, #appDrawer, #drawerBackdrop, #vita-ai-widget {
+      #view-home, #view-labs, #view-neyim, #view-clinical-results, #view-settings, #headerProfileDropdownMenu, #authModal, #normalityPopupModal, #deprescribingModal, #eNabizModal, #profileModal, #addSupplementModal, #symptomReviewModal, #onboardingModal, #appDrawer, #drawerBackdrop, #vita-ai-widget {
         display: none !important;
       }
       #view-report {
@@ -50,20 +52,28 @@
         width: 100% !important;
         max-width: none !important;
         overflow: visible !important;
-        font-size: 10pt !important;
+        font-size: 9.5pt !important;
+        line-height: 1.38 !important;
+      }
+      .print-page thead {
+        display: table-header-group !important;
+      }
+      .print-page tfoot {
+        display: table-footer-group !important;
       }
       .print-page h1, .print-page h2, .print-page h3 {
         break-after: avoid-page;
         page-break-after: avoid;
       }
-      .print-page table, .print-page tr, .print-page .grid > div,
+      .print-page tr, .print-page .report-avoid-break, .print-page .grid > div,
       .print-page #repAnamnesisTableBody tr, .print-page #repTrendTableBody tr,
       .print-page #repFindingsContainer > div, .print-page #repCurrentSupplements tr,
+      .print-page #repConciseClinicalPointsList > div,
       .print-page .signature-box {
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
       }
-      .print-page p, .print-page td, .print-page th { orphans: 2; widows: 2; }
+      .print-page p, .print-page td, .print-page th, .print-page li { orphans: 2; widows: 2; }
     }
     .pulse-danger {
       animation: dangerPulse 2s infinite;

@@ -181,3 +181,62 @@ test("Authenticated user: can create, update, and query own vital_logs", async (
       .get()
   );
 });
+
+test("Authenticated user: can create, update, and read own portal_state while cross-user and shadow fields fail", async () => {
+  const aliceDb = testEnv.authenticatedContext(ALICE_UID).firestore();
+  const bobDb = testEnv.authenticatedContext(BOB_UID).firestore();
+  const unauthDb = testEnv.unauthenticatedContext().firestore();
+  const now = new Date();
+  const stateDocRef = aliceDb
+    .collection("users")
+    .doc(ALICE_UID)
+    .collection("portal_state")
+    .doc("main");
+
+  await assertSucceeds(
+    stateDocRef.set({
+      userId: ALICE_UID,
+      displayName: "Dr. Ayşe Kaya",
+      email: "ayse@vitatakip.com",
+      payloadJson: JSON.stringify({ app: "VitaTakip", version: "9.4.0" }),
+      createdAt: now,
+      updatedAt: now,
+    })
+  );
+
+  await assertSucceeds(stateDocRef.get());
+
+  await assertSucceeds(
+    stateDocRef.update({
+      payloadJson: JSON.stringify({ app: "VitaTakip", version: "9.4.0", updated: true }),
+      updatedAt: new Date(),
+    })
+  );
+
+  // Cross-user read & write must fail
+  await assertFails(
+    bobDb.collection("users").doc(ALICE_UID).collection("portal_state").doc("main").get()
+  );
+  await assertFails(
+    unauthDb.collection("users").doc(ALICE_UID).collection("portal_state").doc("main").get()
+  );
+
+  // Shadow field injection must fail
+  await assertFails(
+    aliceDb
+      .collection("users")
+      .doc(ALICE_UID)
+      .collection("portal_state")
+      .doc("shadow")
+      .set({
+        userId: ALICE_UID,
+        displayName: "Dr. Ayşe Kaya",
+        email: "ayse@vitatakip.com",
+        payloadJson: "{}",
+        isAdmin: true,
+        createdAt: now,
+        updatedAt: now,
+      })
+  );
+});
+

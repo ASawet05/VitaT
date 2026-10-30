@@ -582,6 +582,16 @@ function checkPendingSymptomReviews() {
 
         // IndexedDB tam snapshot'tır; localStorage yazımı başarılı olsa da senkronize edilir.
         persistVitaExtendedData(userId, updatedAt);
+        try {
+          if (typeof isCloudAutoSyncEnabled === "function" && isCloudAutoSyncEnabled() && typeof getLinkedGoogleCloudAccount === "function") {
+            const linkedAcc = getLinkedGoogleCloudAccount();
+            if (linkedAcc && linkedAcc.connected && linkedAcc.email && typeof syncDataToCloudNow === "function") {
+              syncDataToCloudNow(false);
+            }
+          }
+        } catch (cloudSyncErr) {
+          console.warn("Otomatik bulut yedekleme sırasında uyarı:", cloudSyncErr);
+        }
         return allSaved;
       } catch (error) {
         notifyLocalStorageProblem(error);
@@ -882,6 +892,7 @@ function checkPendingSymptomReviews() {
       checkPendingSymptomReviews();
       if (state.activeTab === "view-labs") renderBiomarkerTrendChart();
       renderReportTab();
+      if (typeof refreshCloudSyncUI === "function") refreshCloudSyncUI();
     }
 
     let toastTimeout = null;

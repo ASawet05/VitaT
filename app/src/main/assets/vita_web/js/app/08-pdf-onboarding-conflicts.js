@@ -33,6 +33,14 @@ function applyParsedPdfValues() {
         if (egfrCrInput) egfrCrInput.value = String(state.labValues.creatinine);
       }
 
+      if (typeof parseKidneyFunctionAndCompareMedications === "function") {
+        try {
+          parseKidneyFunctionAndCompareMedications(temporarilyParsedLabResults, { triggerSource: "pdf_apply", renderUI: true });
+        } catch (kidneyParseErr) {
+          console.warn("Böbrek fonksiyonu ve ilaç güvenliği analizi çalıştırılamadı:", kidneyParseErr);
+        }
+      }
+
       closeENabizModal();
       saveCurrentLabRecordWithDate();
     }
@@ -855,8 +863,597 @@ function applyParsedPdfValues() {
           </div>
         `;
       }
+
+      if (typeof parseKidneyFunctionAndCompareMedications === "function") {
+        try {
+          parseKidneyFunctionAndCompareMedications(null, { triggerSource: "conflict_scan", renderUI: true });
+        } catch (_) {}
+      }
     }
 
-    /* BOYLAMSAL BİYOLOJİK YANIT SÜRESİ KONTROLÜ */
+    /* =========================================================================
+       YAPAY ZEKA (AI) DESTEKLİ BÖBREK FONKSİYONU (KREATİNİN & GFR/eGFR) AYRIŞTIRICI
+       VE AKTİF İLAÇ GÜVENLİĞİ (KIDNEY SAFETY) KARŞILAŞTIRMA MOTORU
+       ========================================================================= */
+    const VITA_KIDNEY_MEDICATION_SAFETY_RULES = [
+      {
+        id: "KIDNEY_MED_METFORMIN",
+        drugCode: "metformin",
+        drugLabel: "Metformin (Glucophage / Matofin / Diaformin / Glifor)",
+        keywords: ["metformin", "glucophage", "matofin", "diaformin", "glifor"],
+        evaluate: function (creatinine, egfr, gender) {
+          const crHighThreshold = gender === "E" ? 1.35 : 1.15;
+          if (egfr !== null && egfr < 30) {
+            return {
+              severity: "critical",
+              badge: "Kontrendike • eGFR < 30",
+              title: "⛔ Böbrek Güvenliği Uyarısı (Kidney Safety): Metformin & eGFR < 30 mL/dk/1.73m²",
+              mechanism: `Böbrek filtrasyon hızınız (eGFR: ${egfr} mL/dk/1.73m²${creatinine !== null ? `, Kreatinin: ${creatinine} mg/dL` : ""}) kritik eşiğin (<30) altındadır. Metformin değişmeden böbreklerden atıldığından plazmada birikerek hayatı tehdit eden Metformin İlişkili Laktik Asidoz (MALA) riskini artırır.`,
+              recommendation: "FDA ve KDIGO kılavuzlarına göre eGFR < 30 mL/dk/1.73m² düzeyinde Metformin kontrendikedir. İlacınızı kendi başınıza kesmeden derhal reçete eden dahiliye/endokrinoloji hekiminize başvurunuz.",
+              source: "FDA Boxed Warning / KDIGO Diabetes in CKD Guideline"
+            };
+          }
+          if ((egfr !== null && egfr < 45) || (creatinine !== null && creatinine >= 1.5)) {
+            return {
+              severity: "critical",
+              badge: "Doz Gözden Geçirme • eGFR 30–44",
+              title: "⚠️ Böbrek Güvenliği Uyarısı (Kidney Safety): Metformin & Azalmış GFR (Evre G3b)",
+              mechanism: `Kayıtlı böbrek göstergeleriniz (eGFR: ${egfr !== null ? egfr + " mL/dk/1.73m²" : "—"}, Kreatinin: ${creatinine !== null ? creatinine + " mg/dL" : "—"}) renal klirensin belirgin azaldığını göstermektedir. Bu aralıkta Metformin birikimi ve laktik asidoz riski artar.`,
+              recommendation: "KDIGO kılavuzuna göre eGFR 30–44 aralığında yeni Metformin başlanmamalı, mevcut kullanımda ise günlük maksimum doz hekim tarafından %50 azaltılarak (maks. 1000 mg/gün) yakın renal takip yapılmalıdır.",
+              source: "KDIGO CKD Guideline / TİTCK"
+            };
+          }
+          if ((egfr !== null && egfr < 60) || (creatinine !== null && creatinine > crHighThreshold)) {
+            return {
+              severity: "warning",
+              badge: "Yakın Renal İzlem • eGFR 45–59",
+              title: "⚠️ Böbrek Güvenliği Notu (Kidney Safety): Metformin & Sınırda Böbrek Filtrasyonu",
+              mechanism: `Böbrek fonksiyon göstergeleriniz (eGFR: ${egfr !== null ? egfr + " mL/dk/1.73m²" : "—"}, Kreatinin: ${creatinine !== null ? creatinine + " mg/dL" : "—"}) hafif-orta düzeyde azalmış filtrasyona işaret etmektedir.`,
+              recommendation: "Dehidratasyon (yetersiz sıvı alımı), kontrastlı görüntüleme (BT/MR anjiyo) veya akut enfeksiyon durumlarında böbrek fonksiyonu hızla değişebileceğinden 3–6 ayda bir Kreatinin/eGFR ve B12 kontrolü önerilir.",
+              source: "ADA Standards of Care / KDIGO"
+            };
+          }
+          return null;
+        }
+      },
+      {
+        id: "KIDNEY_MED_DIURETIC",
+        drugCode: "diuretic",
+        drugLabel: "Diüretik / İdrar Söktürücü (Lasix / Furosemid / Fludex / Hidroklorotiyazid / Aldactone)",
+        keywords: ["diüretik", "idrar söktürücü", "furosemid", "lasix", "indapamid", "fludex", "hidroklorotiyazid", "spironolakton", "aldactone", "aldactazide", "desal"],
+        evaluate: function (creatinine, egfr, gender) {
+          const crHighThreshold = gender === "E" ? 1.25 : 1.10;
+          if ((egfr !== null && egfr < 60) || (creatinine !== null && creatinine > crHighThreshold)) {
+            return {
+              severity: egfr !== null && egfr < 30 ? "critical" : "warning",
+              badge: egfr !== null && egfr < 30 ? "Yüksek Elektrolit & Prerenal Risk" : "Renal & Elektrolit İzlemi",
+              title: "⚠️ Böbrek Güvenliği Uyarısı (Kidney Safety): Diüretik Kullanımı & Böbrek Fonksiyonu",
+              mechanism: `Diüretik tedavisi altında Kreatinin (${creatinine !== null ? creatinine + " mg/dL" : "—"}) yüksekliği veya düşük eGFR (${egfr !== null ? egfr + " mL/dk/1.73m²" : "—"}) saptanması; intravasküler hacim azalmasına (prerenal azotemi) veya kronik böbrek etkilenmesine işaret edebilir. Potasyum tutucu diüretiklerde (Spironolakton) hiperkalemi, kıvrım/tiyazid diüretiklerde hipomagnezemi ve hipokalemi riski artar.`,
+              recommendation: "Sıvı alım hedefini ve diüretik dozunu kendi başınıza değiştirmeden hekiminizle Serum Potasyum (K⁺), Sodyum (Na⁺), Magnezyum ve Üre/Kreatinin kontrolü planlayınız.",
+              source: "KDIGO Blood Pressure in CKD / Lexicomp"
+            };
+          }
+          return null;
+        }
+      },
+      {
+        id: "KIDNEY_MED_BISPHOSPHONATE",
+        drugCode: "bisphosphonate",
+        drugLabel: "Bisfosfonat (Fosamax / Alendronat / Bonviva / Zoledronat)",
+        keywords: ["alendronat", "fosamax", "risedronat", "actonel", "ibandronat", "bonviva", "zoledronat", "aclasta", "bisfosfonat"],
+        evaluate: function (creatinine, egfr, gender) {
+          const crHighThreshold = gender === "E" ? 1.30 : 1.10;
+          if ((egfr !== null && egfr < 35) || (creatinine !== null && creatinine >= 1.6)) {
+            return {
+              severity: "critical",
+              badge: "Renal Eşik Altı • eGFR < 35",
+              title: "⛔ Böbrek Güvenliği Uyarısı (Kidney Safety): Bisfosfonat & Düşük GFR (<35 mL/dk)",
+              mechanism: `Bisfosfonatlar böbreklerden glomerüler filtrasyon ve tübüler sekresyonla atılır. eGFR < 35 mL/dk/1.73m² (mevcut eGFR: ${egfr !== null ? egfr : "—"}, Kreatinin: ${creatinine !== null ? creatinine + " mg/dL" : "—"}) düzeyinde akut tübüler hasar ve adinamik kemik hastalığı riski artar.`,
+              recommendation: "eGFR < 30–35 mL/dk/1.73m² durumunda bisfosfonatlar genellikle önerilmez; endokrinoloji/nefroloji hekiminizle Ca, Fosfor, PTH ve 25(OH)D düzeylerini birlikte değerlendiriniz.",
+              source: "FDA / Endocrine Society Osteoporosis Guideline"
+            };
+          }
+          if ((egfr !== null && egfr < 60) || (creatinine !== null && creatinine > crHighThreshold)) {
+            return {
+              severity: "warning",
+              badge: "CKD-MBD İzlemi • eGFR < 60",
+              title: "⚠️ Böbrek Güvenliği Notu (Kidney Safety): Kemik Erimesi İlacı & eGFR İzlemi",
+              mechanism: `Azalmış eGFR (${egfr !== null ? egfr + " mL/dk/1.73m²" : "—"}) varlığında kemik-mineral metabolizması (CKD-MBD) etkilenebilir.`,
+              recommendation: "Bisfosfonat alımı öncesi yeterli hidrasyon sağlanmalı ve her kontrol tahlilinde Kreatinin, eGFR ve Kalsiyum izlenmelidir.",
+              source: "KDIGO CKD-MBD Guideline"
+            };
+          }
+          return null;
+        }
+      },
+      {
+        id: "KIDNEY_MED_ANTIBIOTIC",
+        drugCode: "antibiotic",
+        drugLabel: "Antibiyotik (Siprofloksasin / Levofloksasin / Doksisiklin)",
+        keywords: ["siprofloksasin", "cipro", "levofloksasin", "tavanic", "moksifloksasin", "doksisiklin", "monodoks", "tetrasiklin", "gentamisin", "amikasin", "vankomisin", "kinolon"],
+        evaluate: function (creatinine, egfr, gender) {
+          const crHighThreshold = gender === "E" ? 1.25 : 1.10;
+          if ((egfr !== null && egfr < 50) || (creatinine !== null && creatinine > crHighThreshold)) {
+            return {
+              severity: egfr !== null && egfr < 30 ? "critical" : "warning",
+              badge: "Renal Doz Ayarı Gerekli",
+              title: "⚠️ Böbrek Güvenliği Uyarısı (Kidney Safety): Antibiyotik Renal Klirens Uyarısı",
+              mechanism: `Florokinolon (Siprofloksasin, Levofloksasin) ve birçok antibiyotik ağırlıklı olarak böbrek yoluyla atılır. eGFR < 50 mL/dk/1.73m² (mevcut eGFR: ${egfr !== null ? egfr : "—"}, Kreatinin: ${creatinine !== null ? creatinine + " mg/dL" : "—"}) durumunda standart dozlarda ilaç birikimi, kristalüri ve nörotoksisite/tendon riski artar.`,
+              recommendation: "Reçete eden hekiminize veya eczacınıza güncel eGFR/Kreatinin sonucunuzu bildirerek böbrek doz ayarlaması gerekip gerekmediğini teyit ediniz.",
+              source: "Sanford Guide / Lexicomp Renal Dosing"
+            };
+          }
+          return null;
+        }
+      },
+      {
+        id: "KIDNEY_MED_NSAID_OR_RAAS",
+        drugCode: "nsaid_raas",
+        drugLabel: "NSAİİ Ağrı Kesici veya ACEİ/ARB Tansiyon İlacı",
+        keywords: ["ibuprofen", "naproksen", "diklofenak", "ketoprofen", "meloksikam", "deksketoprofen", "arveles", "majezik", "voltaren", "apranax", "brufen", "advil", "dolorex", "ramipril", "enalapril", "lisinopril", "perindopril", "valsartan", "losartan", "kandesartan", "telmisartan", "irbesartan", "delix", "cozaar", "atacand", "micardis"],
+        evaluate: function (creatinine, egfr, gender) {
+          const crHighThreshold = gender === "E" ? 1.25 : 1.10;
+          if ((egfr !== null && egfr < 60) || (creatinine !== null && creatinine > crHighThreshold)) {
+            return {
+              severity: "critical",
+              badge: "Nefrotoksisite / Hemodinamik Risk",
+              title: "⛔ Böbrek Güvenliği Uyarısı (Kidney Safety): NSAİİ / RAAS İnhibitörü & Böbrek Perfüzyonu",
+              mechanism: `Kayıtlı ilaçlarınız arasında bulunan NSAİİ ağrı kesiciler afferent arteriyolü daraltarak, ACEİ/ARB grubu ilaçlar ise efferent arteriyol tonusunu değiştirerek intraglomerüler basıncı etkiler. Mevcut Kreatinin (${creatinine !== null ? creatinine + " mg/dL" : "—"}) / eGFR (${egfr !== null ? egfr + " mL/dk/1.73m²" : "—"}) tablosunda özellikle NSAİİ kullanımı akut böbrek hasarı (ABH) ve hiperkalemi riskini ciddi ölçüde yükseltir.`,
+              recommendation: "Düşük eGFR veya yüksek Kreatinin varlığında reçetesiz NSAİİ ağrı kesicilerden kaçınılmalı; tansiyon ilaçlarınız ise yalnızca hekim kontrolünde kreatinin ve potasyum takibiyle düzenlenmelidir.",
+              source: "KDIGO AKI & CKD Guidelines"
+            };
+          }
+          return null;
+        }
+      }
+    ];
 
-    
+    /**
+     * Extracts Creatinine (mg/dL or µmol/L) and GFR/eGFR (mL/min/1.73m²) from raw PDF text,
+     * parsed lab preview objects, or current state.labValues.
+     */
+    function parseKidneyFunctionMarkersFromSource(rawSource) {
+      const p = (typeof state !== "undefined" && state.user) ? state.user : { age: 28, gender: "K" };
+      const age = Number(p.age) || 28;
+      const gender = p.gender || "K";
+
+      let extractedCr = null;
+      let extractedGfr = null;
+      let crUnitConverted = false;
+      let rawMatchedLines = [];
+
+      // 1. Eğer ham metin (PDF / OCR / e-Nabız metni) verildiyse gelişmiş regex + AI önişleme ile ayrıştır
+      if (typeof rawSource === "string" && rawSource.trim().length > 0) {
+        const text = rawSource.replace(/\r/g, "\n");
+        const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+
+        const crRegex = /(?:serum\s*)?(?:kreatinin|creatinine|crea)\b[^0-9]*?(\d{1,3}(?:[.,]\d{1,3})?)\s*(mg\s*\/\s*dl|µmol\s*\/\s*l|umol\s*\/\s*l|mcmol\s*\/\s*l)?/i;
+        const gfrRegex = /(?:egfr|gfr|glomer[üu]ler\s*filtrasyon\s*h[ıi]z[ıi]|ckd[-\s]*epi)\b[^0-9]*?>?\s*(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:ml\s*\/\s*(?:dk|min))?/i;
+
+        lines.forEach(line => {
+          if (extractedCr === null && /kreatinin|creatinine|\bcrea\b/i.test(line) && !/klirens|clearance|idrar|urine|kreatin\s*kinaz|\bck\b/i.test(line)) {
+            const m = line.match(crRegex);
+            if (m && m[1]) {
+              let val = parseFloat(m[1].replace(",", "."));
+              const unit = String(m[2] || "").toLowerCase();
+              if (Number.isFinite(val) && val > 0) {
+                if (/mol/.test(unit) || (val > 25 && val < 1500)) {
+                  val = Math.round((val / 88.4) * 100) / 100;
+                  crUnitConverted = true;
+                }
+                if (val >= 0.1 && val <= 25) {
+                  extractedCr = val;
+                  rawMatchedLines.push(line);
+                }
+              }
+            }
+          }
+          if (extractedGfr === null && /\begfr\b|\bgfr\b|filtrasyon\s*h[ıi]z[ıi]|ckd[-\s]*epi/i.test(line)) {
+            const m = line.match(gfrRegex);
+            if (m && m[1]) {
+              const val = parseFloat(m[1].replace(",", "."));
+              if (Number.isFinite(val) && val >= 2 && val <= 200) {
+                extractedGfr = Math.round(val);
+                rawMatchedLines.push(line);
+              }
+            }
+          }
+        });
+      } else if (rawSource && typeof rawSource === "object") {
+        // 2. temporarilyParsedLabResults veya özel lab nesnesi verildiyse
+        if (rawSource.creatinine !== undefined && rawSource.creatinine !== null) {
+          const rawCr = typeof rawSource.creatinine === "object" ? rawSource.creatinine.value : rawSource.creatinine;
+          const numCr = parseFloat(String(rawCr).replace(",", "."));
+          if (Number.isFinite(numCr) && numCr > 0) {
+            extractedCr = numCr > 25 ? Math.round((numCr / 88.4) * 100) / 100 : numCr;
+            if (numCr > 25) crUnitConverted = true;
+          }
+        }
+        if (rawSource.gfr !== undefined || rawSource.egfr !== undefined) {
+          const rawG = rawSource.gfr !== undefined ? rawSource.gfr : rawSource.egfr;
+          const valG = typeof rawG === "object" ? rawG.value : rawG;
+          const numG = parseFloat(String(valG).replace(",", "."));
+          if (Number.isFinite(numG) && numG > 0) extractedGfr = Math.round(numG);
+        }
+      }
+
+      // 3. Eksikse mevcut kayıtlı tahlil değerlerinden (VitaLabInsights / state.labValues) tamamla
+      const labCtx = (typeof window !== "undefined" && window.VitaLabInsights && typeof window.VitaLabInsights.cdssInputs === "function")
+        ? window.VitaLabInsights.cdssInputs()
+        : null;
+      const activeLabs = labCtx && labCtx.values ? labCtx.values : ((typeof state !== "undefined" && state.labValues) ? state.labValues : {});
+
+      if (extractedCr === null && activeLabs && activeLabs.creatinine !== null && activeLabs.creatinine !== undefined && activeLabs.creatinine !== "") {
+        const fallbackCr = parseFloat(String(activeLabs.creatinine).replace(",", "."));
+        if (Number.isFinite(fallbackCr) && fallbackCr > 0) extractedCr = fallbackCr;
+      }
+
+      // 4. CKD-EPI (2021) eGFR Hesaplaması
+      const ckdEpiResult = (extractedCr !== null && age >= 18 && typeof calculateCKDEPI_eGFR === "function")
+        ? calculateCKDEPI_eGFR(extractedCr, age, gender)
+        : null;
+      const effectiveEgfr = extractedGfr !== null
+        ? extractedGfr
+        : (ckdEpiResult && Number.isFinite(ckdEpiResult.egfr) ? ckdEpiResult.egfr : null);
+
+      const crUpperLimit = gender === "E" ? 1.25 : 1.10;
+      const isCreatinineElevated = extractedCr !== null && extractedCr > crUpperLimit;
+      const isEgfrReduced = effectiveEgfr !== null && effectiveEgfr < 60;
+      const isMildlyReducedEgfr = effectiveEgfr !== null && effectiveEgfr >= 60 && effectiveEgfr < 90;
+
+      let stageCode = ckdEpiResult ? ckdEpiResult.stage : null;
+      let stageDesc = ckdEpiResult ? ckdEpiResult.desc : null;
+      if (!stageCode && effectiveEgfr !== null) {
+        if (effectiveEgfr >= 90) { stageCode = "G1"; stageDesc = "Normal veya Yüksek Filtrasyon (≥90)"; }
+        else if (effectiveEgfr >= 60) { stageCode = "G2"; stageDesc = "Hafif Azalmış GFR (60–89)"; }
+        else if (effectiveEgfr >= 45) { stageCode = "G3a"; stageDesc = "Hafif-Orta Azalmış GFR (45–59)"; }
+        else if (effectiveEgfr >= 30) { stageCode = "G3b"; stageDesc = "Orta-Ağır Azalmış GFR (30–44)"; }
+        else if (effectiveEgfr >= 15) { stageCode = "G4"; stageDesc = "Ağır Azalmış GFR (15–29)"; }
+        else { stageCode = "G5"; stageDesc = "Böbrek Yetmezliği (<15)"; }
+      }
+
+      return {
+        creatinine: extractedCr,
+        creatinineUpperLimit: crUpperLimit,
+        unitConvertedFromUmol: crUnitConverted,
+        labReportedGfr: extractedGfr,
+        calculatedEgfr: ckdEpiResult ? ckdEpiResult.egfr : null,
+        effectiveEgfr: effectiveEgfr,
+        stage: stageCode,
+        stageDesc: stageDesc,
+        isCreatinineElevated: isCreatinineElevated,
+        isEgfrReduced: isEgfrReduced,
+        isMildlyReducedEgfr: isMildlyReducedEgfr,
+        rawMatchedLines: rawMatchedLines
+      };
+    }
+
+    /**
+     * Dedicated AI-driven & rule-verified Kidney Function (Creatinine, GFR/eGFR) parser
+     * that compares extracted markers against recent Medication & Supplement entries
+     * in the user profile and outputs a specific "Kidney Safety" warning for Klinik Analiz.
+     */
+    function parseKidneyFunctionAndCompareMedications(rawSource = null, options = {}) {
+      const p = (typeof state !== "undefined" && state.user) ? state.user : { age: 28, gender: "K", chronic: [], medications: [] };
+      const gender = p.gender || "K";
+      const markers = parseKidneyFunctionMarkersFromSource(rawSource);
+      const medProfile = (typeof getActiveUserMedicationCodesAndLabels === "function")
+        ? getActiveUserMedicationCodesAndLabels()
+        : { activeCodes: Array.isArray(p.chronic) ? p.chronic : [], customMeds: Array.isArray(p.medications) ? p.medications : [], matchedLabelsByCode: {} };
+
+      const activeCodes = medProfile.activeCodes || [];
+      const customMeds = medProfile.customMeds || [];
+      const supplements = (typeof state !== "undefined" && Array.isArray(state.supplements)) ? state.supplements : [];
+      const allMedStrings = [
+        ...customMeds,
+        ...activeCodes.map(code => {
+          const cls = VITA_CLINICAL_DRUG_NUTRIENT_DB.quickMedicationClasses.find(c => c.code === code);
+          return cls ? cls.label : code;
+        })
+      ];
+
+      const warnings = [];
+      const cr = markers.creatinine;
+      const egfr = markers.effectiveEgfr;
+      const hasKidneyHistory = activeCodes.includes("kidney");
+
+      // 1. Reçeteli İlaçlar ile Kreatinin / eGFR Karşılaştırması
+      VITA_KIDNEY_MEDICATION_SAFETY_RULES.forEach(rule => {
+        const hasCode = activeCodes.includes(rule.drugCode);
+        const matchedCustomMed = customMeds.find(m =>
+          rule.keywords.some(kw => String(m).toLocaleLowerCase("tr-TR").includes(kw))
+        );
+        if (!hasCode && !matchedCustomMed) return;
+
+        const matchedMedDisplay = matchedCustomMed || (medProfile.matchedLabelsByCode && medProfile.matchedLabelsByCode[rule.drugCode]) || rule.drugLabel;
+        const evalOutcome = rule.evaluate(cr, egfr, gender);
+        if (evalOutcome) {
+          warnings.push({
+            id: rule.id,
+            medicationName: matchedMedDisplay,
+            severity: evalOutcome.severity,
+            badge: evalOutcome.badge,
+            title: evalOutcome.title,
+            mechanism: evalOutcome.mechanism,
+            recommendation: evalOutcome.recommendation,
+            source: evalOutcome.source
+          });
+        } else if (cr === null && egfr === null) {
+          // İlaç aktif ama henüz Kreatinin/eGFR girilmemişse bazal böbrek güvenlik uyarısı üret
+          warnings.push({
+            id: `${rule.id}_MISSING_LAB`,
+            medicationName: matchedMedDisplay,
+            severity: "monitoring",
+            badge: "Kreatinin / eGFR Ölçümü Önerilir",
+            title: `ℹ️ Böbrek Güvenliği Kontrolü (Kidney Safety): ${matchedMedDisplay} İçin Bazal Kreatinin/eGFR Eksik`,
+            mechanism: `Profilinizde "${matchedMedDisplay}" kullanımı kayıtlıdır. Bu ilacın güvenli doz aralığının doğrulanması için güncel Serum Kreatinin ve eGFR değerlerinin bilinmesi gerekir.`,
+            recommendation: "Tahlillerim sekmesinden veya e-Nabız PDF yükleyici ile Kreatinin sonucunuzu ekleyerek ilaç-böbrek güvenlik taramasını tamamlayınız.",
+            source: "KDIGO / Klinik İlaç Güvenliği"
+          });
+        }
+      });
+
+      // 2. Renal Yüklü / Nefrotoksik Riskli Takviyeler (Kreatin, Yüksek Doz Magnezyum/Kalsiyum) ile Karşılaştırma
+      const hasKidneyImpairment = markers.isCreatinineElevated || markers.isEgfrReduced || hasKidneyHistory;
+      if (hasKidneyImpairment) {
+        supplements.forEach(sup => {
+          const supText = `${sup.name || ""} ${sup.selectedForm || ""} ${sup.formKey || ""}`.toLocaleLowerCase("tr-TR");
+          if (/kreatin|creatine/.test(supText)) {
+            warnings.push({
+              id: `KIDNEY_SUP_CREATINE_${sup.id || "1"}`,
+              medicationName: sup.name,
+              severity: "critical",
+              badge: "Böbrek Emniyet Kilidi",
+              title: `⛔ Böbrek Güvenliği Uyarısı (Kidney Safety): ${sup.name} & Kreatinin/eGFR Yüksekliği`,
+              mechanism: `Kreatin takviyesi iskelet kasında kreatinine dönüşerek serum kreatinin ölçümünü yapay olarak yükseltebilir ve mevcut düşük eGFR (${egfr !== null ? egfr + " mL/dk/1.73m²" : "—"}) tablosunda renal değerlendirmeyi karıştırır.`,
+              recommendation: "Böbrek fonksiyon bozukluğu veya yüksek kreatinin varlığında kreatin takviyesi durdurulmalı ve nefroloji/dahiliye hekimiyle görüşülmelidir (gerekirse Sistatin-C ile eGFR doğrulanır).",
+              source: "KDIGO CKD Evaluation Guideline"
+            });
+          } else if (/magnezyum|magnesium/.test(supText) && ((egfr !== null && egfr < 45) || (cr !== null && cr >= 1.5))) {
+            warnings.push({
+              id: `KIDNEY_SUP_MG_${sup.id || "1"}`,
+              medicationName: sup.name,
+              severity: "warning",
+              badge: "Hipermagnezemi Riski • eGFR < 45",
+              title: `⚠️ Böbrek Güvenliği Uyarısı (Kidney Safety): ${sup.name} & Azalmış Renal Magnezyum Atılımı`,
+              mechanism: `Magnezyumun ana atılım yolu böbreklerdir. eGFR < 45 mL/dk/1.73m² düzeyinde kontrolsüz magnezyum takviyesi serum magnezyum birikimine (hipermagnezemi, kas güçsüzlüğü, iletim yavaşlaması) yol açabilir.`,
+              recommendation: "Magnezyum takviyesine yalnızca hekim kontrolünde ve serum magnezyum takibiyle devam edilmelidir.",
+              source: "NIH ODS / KDIGO"
+            });
+          }
+        });
+      }
+
+      // 3. Eğer ilaç kaydı olmasa bile Kreatinin veya eGFR tek başına anormal ise genel Kidney Safety uyarısı ekle
+      if (warnings.length === 0 && (markers.isCreatinineElevated || markers.isEgfrReduced)) {
+        warnings.push({
+          id: "KIDNEY_GENERAL_ABNORMAL_MARKER",
+          medicationName: allMedStrings.length > 0 ? allMedStrings.join(", ") : "Kayıtlı Reçeteli İlaç Yok",
+          severity: (egfr !== null && egfr < 45) ? "critical" : "warning",
+          badge: `Evre ${markers.stage || "Renal İzlem"} • eGFR ${egfr !== null ? egfr : "—"}`,
+          title: `⚠️ Böbrek Fonksiyonu Güvenlik Uyarısı (Kidney Safety): Kreatinin ${cr !== null ? cr + " mg/dL" : "—"} | eGFR ${egfr !== null ? egfr + " mL/dk/1.73m²" : "—"}`,
+          mechanism: `Böbrek fonksiyon göstergeleriniz referans eşiklerinin dışında saptanmıştır (${markers.stageDesc || "Azalmış renal filtrasyon"}). Yeni başlanacak tüm reçeteli ilaçlar (özellikle antibiyotikler, ağrı kesiciler/NSAİİ, kontrast maddeler) ve mineral takviyeleri böbrek klirensine göre değerlendirilmelidir.`,
+          recommendation: "Hekim görüşmenizde bu Kreatinin/eGFR sonucunu paylaşınız; reçetesiz ağrı kesici (NSAİİ) ve yüksek doz mineral yüklemelerinden kaçınınız.",
+          source: "KDIGO 2024 CKD Guideline"
+        });
+      }
+
+      const hasCritical = warnings.some(w => w.severity === "critical");
+      const hasWarning = warnings.some(w => w.severity === "warning");
+      const overallStatus = hasCritical ? "critical" : (hasWarning ? "warning" : (warnings.length > 0 ? "monitoring" : "safe"));
+
+      const resultPayload = {
+        timestamp: new Date().toISOString(),
+        triggerSource: options.triggerSource || "manual",
+        markers: markers,
+        medicationsChecked: allMedStrings,
+        warnings: warnings,
+        overallStatus: overallStatus,
+        aiEnhancedNarrative: (typeof state !== "undefined" && state.lastKidneySafetyAnalysis && state.lastKidneySafetyAnalysis.aiEnhancedNarrative)
+          ? state.lastKidneySafetyAnalysis.aiEnhancedNarrative
+          : null
+      };
+
+      if (typeof state !== "undefined") {
+        state.lastKidneySafetyAnalysis = resultPayload;
+      }
+
+      if (options.renderUI !== false && typeof renderClinicalKidneySafetyWarningUI === "function") {
+        renderClinicalKidneySafetyWarningUI(resultPayload);
+      }
+
+      // İsteğe bağlı canlı AI zenginleştirmesi (kullanıcı AI onayı + Gemini anahtarı aktifse)
+      if (options.requestAI === true && typeof runAIKidneyFunctionMedicationParse === "function") {
+        runAIKidneyFunctionMedicationParse(rawSource, resultPayload);
+      }
+
+      return resultPayload;
+    }
+
+    /**
+     * Uses VitaAIChat (Gemini API when configured, or structured clinical NLG fallback)
+     * to parse unstructured lab text for Creatinine/GFR and synthesize a physician-grade
+     * Kidney Safety medication cross-check paragraph.
+     */
+    async function runAIKidneyFunctionMedicationParse(rawTextOrSource = null, existingAnalysis = null) {
+      const analysis = existingAnalysis || parseKidneyFunctionAndCompareMedications(rawTextOrSource, { renderUI: true });
+      const btn = document.getElementById("btnRunAiKidneySafetyCheck");
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>AI Böbrek & İlaç Analizi...</span>`;
+      }
+
+      try {
+        const cr = analysis.markers.creatinine;
+        const egfr = analysis.markers.effectiveEgfr;
+        const meds = analysis.medicationsChecked.length > 0 ? analysis.medicationsChecked.join(", ") : "Kayıtlı kronik ilaç yok";
+        const sups = (typeof state !== "undefined" && Array.isArray(state.supplements) && state.supplements.length > 0)
+          ? state.supplements.map(s => `${s.name} (${s.doseText || s.selectedForm || ""})`).join(", ")
+          : "Kayıtlı takviye yok";
+
+        let aiSummary = "";
+        if (window.VitaAIChat && typeof window.VitaAIChat.isConfigured === "function" && window.VitaAIChat.isConfigured()) {
+          const prompt = [
+            "Sen bir İç Hastalıkları ve Nefroloji uzmanısın. Aşağıdaki hasta verilerinden Böbrek Fonksiyonu (Kreatinin, GFR/eGFR) göstergelerini değerlendir ve hastanın aktif ilaç/takviye listesiyle karşılaştırarak Türkçe, 3-4 cümlelik net bir 'Böbrek Güvenliği (Kidney Safety)' klinik uyarısı yaz.",
+            `Kreatinin: ${cr !== null ? cr + " mg/dL" : "Girilmedi"}, eGFR (CKD-EPI 2021): ${egfr !== null ? egfr + " mL/dk/1.73m² (" + (analysis.markers.stage || "") + ")" : "Hesaplanamadı"}.`,
+            `Kayıtlı İlaçlar: ${meds}.`,
+            `Kayıtlı Takviyeler: ${sups}.`,
+            typeof rawTextOrSource === "string" && rawTextOrSource.trim() ? `Ham Tahlil Metni Özeti: ${rawTextOrSource.slice(0, 600)}` : "",
+            "Kesin tanı koyma veya ilacı kesme emri verme; hangi ilacın neden hekimle gözden geçirilmesi gerektiğini açıkla."
+          ].filter(Boolean).join("\n");
+
+          aiSummary = await window.VitaAIChat.callSelectedAI(prompt);
+        }
+
+        if (!aiSummary || !String(aiSummary).trim()) {
+          // Deterministik uzman nefroloji/dahiliye NLG sentezi (AI anahtarı olmasa da her zaman çalışır)
+          if (cr === null && egfr === null) {
+            aiSummary = `Böbrek Güvenliği (Kidney Safety) Ön Değerlendirmesi: Profilinizde kayıtlı ilaçlar (${meds}) incelendi; ancak karşılaştırma için güncel Serum Kreatinin veya eGFR sonucu henüz girilmemiştir. Özellikle böbrek yoluyla atılan ilaçların güvenlik doğrulaması için son biyokimya tahlilinizdeki Kreatinin değerini giriniz.`;
+          } else if (analysis.warnings.length > 0) {
+            aiSummary = `Böbrek Güvenliği (Kidney Safety) Klinik Sentezi: Ölçülen Serum Kreatinin (${cr !== null ? cr + " mg/dL" : "—"}) ve hesaplanan CKD-EPI 2021 eGFR (${egfr !== null ? egfr + " mL/dk/1.73m², Evre " + (analysis.markers.stage || "—") : "—"}) değerleriniz, profilinizdeki aktif ilaç/takviye kayıtlarıyla (${meds}) çapraz denetlenmiştir. Toplam ${analysis.warnings.length} adet böbrek güvenliği uyarısı (${analysis.warnings.map(w => w.medicationName).join(", ")}) saptanmış olup renal klirens ve doz güvenliği açısından hekim konsültasyonu önerilir.`;
+          } else {
+            aiSummary = `Böbrek Güvenliği (Kidney Safety) Klinik Sentezi: Serum Kreatinin (${cr !== null ? cr + " mg/dL" : "—"}) ve eGFR (${egfr !== null ? egfr + " mL/dk/1.73m², Evre " + (analysis.markers.stage || "G1") : "—"}) göstergeleriniz referans sınırları içerisinde olup aktif ilaç profilinizle (${meds}) akut bir renal kontrendikasyon saptanmamıştır. Yeterli günlük hidrasyonun sürdürülmesi ve rutin hekim kontrolleri önerilir.`;
+          }
+        }
+
+        analysis.aiEnhancedNarrative = String(aiSummary).trim();
+        if (typeof state !== "undefined") {
+          state.lastKidneySafetyAnalysis = analysis;
+        }
+        renderClinicalKidneySafetyWarningUI(analysis);
+        if (typeof showToast === "function") {
+          showToast("Böbrek Güvenliği Denetlendi", "Kreatinin/eGFR ve ilaç etkileşimi analizi Klinik Analiz modülüne işlendi.", "info");
+        }
+      } catch (err) {
+        console.warn("AI Kidney Safety analizi hatası:", err);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> <span>AI Böbrek & İlaç Taramasını Yenile</span>`;
+        }
+      }
+      return analysis;
+    }
+
+    /**
+     * Renders the dedicated "Kidney Safety (Böbrek Güvenliği & İlaç Karşılaştırması)"
+     * warning card inside the Klinik Analiz module (#cdssKidneySafetyWarningContainer).
+     */
+    function renderClinicalKidneySafetyWarningUI(analysisInput = null) {
+      let container = document.getElementById("cdssKidneySafetyWarningContainer");
+      if (!container) {
+        const contraEl = document.getElementById("contraindicationAlertContainer");
+        if (contraEl && contraEl.parentElement) {
+          container = document.createElement("div");
+          container.id = "cdssKidneySafetyWarningContainer";
+          container.className = "hidden";
+          contraEl.parentElement.insertBefore(container, contraEl.nextSibling);
+        }
+      }
+      if (!container) return;
+
+      const analysis = analysisInput || (typeof state !== "undefined" ? state.lastKidneySafetyAnalysis : null) || parseKidneyFunctionAndCompareMedications(null, { renderUI: false });
+      const markers = analysis.markers || {};
+      const warnings = Array.isArray(analysis.warnings) ? analysis.warnings : [];
+      const hasKidneyData = markers.creatinine !== null || markers.effectiveEgfr !== null;
+      const hasMedications = Array.isArray(analysis.medicationsChecked) && analysis.medicationsChecked.length > 0;
+
+      if (!hasKidneyData && warnings.length === 0) {
+        container.classList.add("hidden");
+        container.innerHTML = "";
+        return;
+      }
+
+      const isCritical = analysis.overallStatus === "critical";
+      const isWarning = analysis.overallStatus === "warning";
+      const borderTheme = isCritical
+        ? "border-rose-400 bg-rose-50/90 text-rose-950"
+        : isWarning
+          ? "border-amber-400 bg-amber-50/90 text-amber-950"
+          : "border-teal-300 bg-teal-50/70 text-slate-900";
+
+      const badgeTheme = isCritical
+        ? "bg-rose-600 text-white"
+        : isWarning
+          ? "bg-amber-600 text-white"
+          : "bg-teal-700 text-white";
+
+      const statusLabel = isCritical
+        ? "Kritik Böbrek–İlaç Güvenlik Uyarısı"
+        : isWarning
+          ? "Böbrek Fonksiyonu & İlaç İzlem Uyarısı"
+          : warnings.length > 0
+            ? "Böbrek Güvenliği Ön Kontrolü"
+            : "Böbrek Fonksiyonu & İlaç Uyumu Dengeli";
+
+      container.classList.remove("hidden");
+      container.innerHTML = `
+        <div class="rounded-2xl border-2 ${borderTheme} p-4 sm:p-5 shadow-sm space-y-3" data-testid="kidney-safety-warning-card">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-200/80 pb-3">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl ${badgeTheme} flex items-center justify-center text-base font-black shrink-0 shadow-xs">
+                <i class="fa-solid fa-kit-medical"></i>
+              </div>
+              <div>
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <span class="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${badgeTheme}">
+                    Kidney Safety • Böbrek Güvenliği Kalkanı
+                  </span>
+                  ${markers.stage ? `<span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-white border border-slate-300 text-navy-900">CKD-EPI Evre ${escapeHtmlText(markers.stage)}</span>` : ""}
+                </div>
+                <h4 class="text-xs sm:text-sm font-black text-navy-900 mt-1">
+                  ${escapeHtmlText(statusLabel)}
+                </h4>
+                <p class="text-[11px] text-slate-600 mt-0.5">
+                  Kreatinin: <strong>${markers.creatinine !== null ? escapeHtmlText(String(markers.creatinine)) + " mg/dL" : "Girilmedi"}</strong>
+                  • GFR / eGFR: <strong>${markers.effectiveEgfr !== null ? escapeHtmlText(String(markers.effectiveEgfr)) + " mL/dk/1.73m²" : "Hesaplanamadı"}</strong>
+                  • Denetlenen İlaçlar: <strong>${hasMedications ? escapeHtmlText(analysis.medicationsChecked.join(", ")) : "Kayıtlı kronik ilaç yok"}</strong>
+                </p>
+              </div>
+            </div>
+            <button type="button" id="btnRunAiKidneySafetyCheck" onclick="if(window.SoundEffects) SoundEffects.playClick(); runAIKidneyFunctionMedicationParse(null)" class="px-3 py-2 rounded-xl bg-navy-900 hover:bg-slate-800 text-teal-300 font-bold text-[11px] transition flex items-center gap-1.5 cursor-pointer self-start sm:self-center shrink-0">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>AI Böbrek &amp; İlaç Taramasını Yenile</span>
+            </button>
+          </div>
+
+          ${analysis.aiEnhancedNarrative ? `
+            <div class="p-3 rounded-xl bg-white/90 border border-teal-200 text-xs text-slate-800 leading-relaxed">
+              <strong class="text-navy-900 block text-[11px] mb-0.5"><i class="fa-solid fa-robot text-teal-600 mr-1"></i>AI Böbrek Güvenliği Sentezi:</strong>
+              ${escapeHtmlText(analysis.aiEnhancedNarrative)}
+            </div>
+          ` : ""}
+
+          ${warnings.length > 0 ? `
+            <div class="space-y-2">
+              ${warnings.map(w => `
+                <div class="p-3 rounded-xl bg-white border ${w.severity === "critical" ? "border-rose-300" : "border-amber-200"} text-xs space-y-1">
+                  <div class="flex flex-wrap items-center justify-between gap-1.5">
+                    <strong class="font-black ${w.severity === "critical" ? "text-rose-900" : "text-navy-900"}">${escapeHtmlText(w.title)}</strong>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${w.severity === "critical" ? "bg-rose-100 text-rose-900 border border-rose-300" : "bg-amber-100 text-amber-900 border border-amber-300"}">${escapeHtmlText(w.badge)}</span>
+                  </div>
+                  <p class="text-[11px] text-slate-700 leading-relaxed">${escapeHtmlText(w.mechanism)}</p>
+                  <div class="pt-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                    <span class="font-bold text-teal-800"><i class="fa-solid fa-user-doctor mr-1"></i>${escapeHtmlText(w.recommendation)}</span>
+                    <span class="text-[10px] text-slate-400 font-semibold">${escapeHtmlText(w.source)}</span>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          ` : `
+            <div class="p-2.5 rounded-xl bg-white/80 border border-teal-200 text-xs text-teal-950 flex items-center gap-2">
+              <i class="fa-solid fa-circle-check text-teal-600"></i>
+              <span>Mevcut Kreatinin ve eGFR değerlerinizle kayıtlı ilaç profiliniz arasında spesifik bir böbrek güvenliği çakışması saptanmadı.</span>
+            </div>
+          `}
+        </div>
+      `;
+    }
+
+    window.parseKidneyFunctionMarkersFromSource = parseKidneyFunctionMarkersFromSource;
+    window.parseKidneyFunctionAndCompareMedications = parseKidneyFunctionAndCompareMedications;
+    window.analyzeKidneyFunctionMedicationSafety = parseKidneyFunctionAndCompareMedications;
+    window.runAIKidneyFunctionMedicationParse = runAIKidneyFunctionMedicationParse;
+    window.renderClinicalKidneySafetyWarningUI = renderClinicalKidneySafetyWarningUI;
+
+    /* BOYLAMSAL BİYOLOJİK YANIT SÜRESİ KONTROLÜ */

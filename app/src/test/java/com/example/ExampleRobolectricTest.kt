@@ -32,7 +32,27 @@ class ExampleRobolectricTest {
 
         val indexHtml = context.assets.open("vita_web/index.html").bufferedReader().use { it.readText() }
         assertTrue(indexHtml.contains("VitaTakip"))
-        assertTrue(indexHtml.contains("quickGuestLogin()"))
+        assertTrue(indexHtml.contains("Bulut (Firebase) ile Giriş"))
+        assertTrue(indexHtml.contains("Yerel (Cihaz) Depolama ile Giriş"))
+        assertTrue(indexHtml.contains("id=\"btnFirebaseGoogleLogin\""))
+        assertTrue(indexHtml.contains("startFirebaseGoogleLoginFromPortal()"))
+        assertTrue(indexHtml.contains("id=\"authTabLoginBtn\""))
+        assertTrue(indexHtml.contains("id=\"authTabRegisterBtn\""))
+        assertTrue(indexHtml.contains("id=\"headerCloudSyncBtn\""))
+        assertTrue(indexHtml.contains("id=\"headerCloudSyncPing\""))
+        assertTrue(indexHtml.contains("id=\"headerCloudSyncIcon\""))
+        assertTrue(indexHtml.contains("id=\"profileMenuCloudSyncDot\""))
+        assertTrue(!indexHtml.contains("id=\"homeCompactDosageNotifRow\""))
+        assertTrue(!indexHtml.contains("id=\"btnQuickPwaNotifTrigger\""))
+        assertTrue(!indexHtml.contains("id=\"headerVitaSkor\""))
+        assertTrue(!indexHtml.contains("Hesapsız / Şifresiz Hızlı Giriş"))
+        assertTrue(!indexHtml.contains("quickGuestLogin"))
+
+        val stateLabJs = context.assets.open("vita_web/js/app/06-state-lab-reference.js").bufferedReader().use { it.readText() }
+        assertTrue(stateLabJs.contains("setHeaderCloudSyncVisualState"))
+        assertTrue(stateLabJs.contains("triggerHeaderCloudSyncAnimation"))
+        assertTrue(stateLabJs.contains("Eşitleniyor..."))
+        assertTrue(stateLabJs.contains("Bulut Eşitlendi ✓"))
 
         val symptomImages = listOf(
             "tongue.jpg",
@@ -198,6 +218,50 @@ class ExampleRobolectricTest {
         assertTrue(pwaNotifJs.contains("detectBrowserProfile"))
         assertTrue(pwaNotifJs.contains("getServiceWorkerRegistrationProfile"))
         assertTrue(pwaNotifJs.contains("groupChecklistItems"))
+
+        val conflictsJs = context.assets.open("vita_web/js/app/08-pdf-onboarding-conflicts.js").bufferedReader().use { it.readText() }
+        assertTrue(conflictsJs.contains("VITA_KIDNEY_MEDICATION_SAFETY_RULES"))
+        assertTrue(conflictsJs.contains("parseKidneyFunctionMarkersFromSource"))
+        assertTrue(conflictsJs.contains("parseKidneyFunctionAndCompareMedications"))
+        assertTrue(conflictsJs.contains("renderClinicalKidneySafetyWarningUI"))
+
+        val navJs = context.assets.open("vita_web/js/app/02-navigation.js").bufferedReader().use { it.readText() }
+        assertTrue(navJs.contains("view-settings"))
+        assertTrue(navJs.contains("renderSettingsView"))
+        assertTrue(navJs.contains("toggleHeaderProfileMenu"))
+
+        assertTrue(indexHtml.contains("id=\"view-settings\""))
+        assertTrue(indexHtml.contains("id=\"drawer-nav-view-settings\""))
+        assertTrue(indexHtml.contains("id=\"headerProfileDropdownMenu\""))
+        assertTrue(indexHtml.contains("id=\"drawerQuickNotifToggleBtn\""))
+        assertTrue(!indexHtml.contains("id=\"homeCompactDosageNotifRow\""))
+        assertTrue(indexHtml.contains("id=\"cdssKidneySafetyWarningContainer\""))
+
+        // Verify duplicate old Chart.js canvas is removed from #view-labs while top Recharts mount remains
+        assertTrue(indexHtml.contains("id=\"labsRechartsMultiLineMount\""))
+        assertTrue(!indexHtml.contains("id=\"labTrendChart\""))
+
+        // Verify simplified two-mode Doctor Report (Concise default vs Detailed optional)
+        assertTrue(indexHtml.contains("id=\"btnReportModeConcise\""))
+        assertTrue(indexHtml.contains("id=\"btnReportModeDetailed\""))
+        assertTrue(indexHtml.contains("Kısa doktor raporu oluştur"))
+        assertTrue(indexHtml.contains("Ayrıntılı klinik rapor oluştur"))
+        assertTrue(indexHtml.contains("id=\"repConciseSymptomsSection\""))
+        assertTrue(indexHtml.contains("id=\"repConciseMedSupplementSection\""))
+        assertTrue(indexHtml.contains("id=\"repConciseClinicalPointsSection\""))
+        assertTrue(indexHtml.contains("id=\"repConciseMissingInfoSection\""))
+        assertTrue(reportJs.contains("setDoctorReportMode"))
+        assertTrue(reportJs.contains("getDoctorReportMode"))
+
+        // Verify Google Hesabı Bağla & Bulut Eşitleme button in #authModal, Header, Settings, and #cloudSyncModal
+        assertTrue(indexHtml.contains("id=\"authGoogleCloudSyncBtn\""))
+        assertTrue(indexHtml.contains("id=\"headerCloudSyncBtn\""))
+        assertTrue(indexHtml.contains("id=\"cloudSyncModal\""))
+        assertTrue(indexHtml.contains("id=\"settingsCloudSyncStatusBadge\""))
+        val stateJs = context.assets.open("vita_web/js/app/06-state-lab-reference.js").bufferedReader().use { it.readText() }
+        assertTrue(stateJs.contains("openCloudSyncModal"))
+        assertTrue(stateJs.contains("syncDataToCloudNow"))
+        assertTrue(stateJs.contains("restoreDataFromCloudNow"))
     }
 }
 

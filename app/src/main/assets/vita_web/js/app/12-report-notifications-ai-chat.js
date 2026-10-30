@@ -1,21 +1,115 @@
-function renderReportTab() {
+function getDoctorReportMode() {
+      return (typeof state !== "undefined" && state.reportViewMode === "detailed") ? "detailed" : "concise";
+    }
+
+    function setDoctorReportMode(mode) {
+      const normalized = mode === "detailed" ? "detailed" : "concise";
+      if (typeof state !== "undefined") {
+        state.reportViewMode = normalized;
+      }
+      const btnConcise = document.getElementById("btnReportModeConcise");
+      const btnDetailed = document.getElementById("btnReportModeDetailed");
+      const activeBadge = document.getElementById("reportActiveModeBadge");
+      const printRoot = document.getElementById("doctorReportPrintRoot");
+      const printedTitle = document.getElementById("reportPrintedTitle");
+      const printedSubtitle = document.getElementById("reportPrintedSubtitle");
+      const headerModeTag = document.getElementById("reportHeaderModeTag");
+
+      if (printRoot) printRoot.setAttribute("data-report-mode", normalized);
+
+      if (btnConcise && btnDetailed) {
+        if (normalized === "concise") {
+          btnConcise.setAttribute("aria-pressed", "true");
+          btnConcise.className = "flex items-start gap-3 p-3 rounded-xl border-2 border-teal-600 bg-teal-50/70 text-left transition cursor-pointer";
+          btnDetailed.setAttribute("aria-pressed", "false");
+          btnDetailed.className = "flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-left transition cursor-pointer";
+        } else {
+          btnConcise.setAttribute("aria-pressed", "false");
+          btnConcise.className = "flex items-start gap-3 p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-left transition cursor-pointer";
+          btnDetailed.setAttribute("aria-pressed", "true");
+          btnDetailed.className = "flex items-start gap-3 p-3 rounded-xl border-2 border-indigo-600 bg-indigo-50/60 text-left transition cursor-pointer";
+        }
+      }
+
+      if (activeBadge) {
+        if (normalized === "concise") {
+          activeBadge.className = "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-teal-50 text-teal-800 border border-teal-300";
+          activeBadge.innerHTML = `<i class="fa-solid fa-check-circle text-teal-600"></i><span>Varsayılan: Kısa Doktor Raporu (1–2 Sayfa Özeti)</span>`;
+        } else {
+          activeBadge.className = "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-50 text-indigo-900 border border-indigo-300";
+          activeBadge.innerHTML = `<i class="fa-solid fa-layer-group text-indigo-600"></i><span>Ayrıntılı Klinik Ek Rapor Görünümü</span>`;
+        }
+      }
+
+      if (printedTitle) {
+        printedTitle.textContent = normalized === "concise"
+          ? "DOKTORA GÖTÜRÜLECEK KISA KLİNİK ÖZET RAPORU"
+          : "AYRINTILI KLİNİK DEĞERLENDİRME VE LABORATUVAR EK RAPORU";
+      }
+      if (printedSubtitle) {
+        printedSubtitle.textContent = normalized === "concise"
+          ? "VITATAKİP — HEKİM KONSÜLTASYONU ÖN DEĞERLENDİRME ÖZETİ"
+          : "VITATAKİP — KAPSAMLI ANAMNEZ, TAHLİL TRENDİ VE KARAR DESTEK EKİ";
+      }
+      if (headerModeTag) {
+        headerModeTag.textContent = normalized === "concise" ? "Kısa Doktor Raporu" : "Ayrıntılı Klinik Ek Rapor";
+      }
+
+      renderReportTab();
+    }
+
+    function printDoctorReport() {
+      renderReportTab();
+      window.print();
+    }
+
+    window.getDoctorReportMode = getDoctorReportMode;
+    window.setDoctorReportMode = setDoctorReportMode;
+    window.printDoctorReport = printDoctorReport;
+
+    function renderReportTab() {
       if (!state.user) return;
       const p = state.user;
-      ["repAnamnesisWrapper", "repLabSectionWrapper", "repTrendSectionWrapper", "repFindingsSectionWrapper", "repSupplementsSectionWrapper"]
-        .forEach(id => document.getElementById(id)?.classList.add("hidden"));
+      const reportMode = getDoctorReportMode();
+      const isConcise = reportMode === "concise";
+
+      [
+        "repConciseSymptomsSection",
+        "repLabSectionWrapper",
+        "repConciseMedSupplementSection",
+        "repConciseClinicalPointsSection",
+        "repConciseMissingInfoSection",
+        "repAnamnesisWrapper",
+        "repTrendSectionWrapper",
+        "repFindingsSectionWrapper",
+        "repSupplementsSectionWrapper"
+      ].forEach(id => document.getElementById(id)?.classList.add("hidden"));
+
+      const detailedContainer = document.getElementById("repDetailedSectionsContainer");
+      if (detailedContainer) {
+        detailedContainer.classList.toggle("hidden", isConcise);
+      }
 
       const repDateEl = document.getElementById("reportDate");
       const repCodeEl = document.getElementById("reportProtocolNo");
       const reportNow = new Date();
-      if (repDateEl) repDateEl.textContent = reportNow.toLocaleDateString("tr-TR");
+      const formattedDate = reportNow.toLocaleDateString("tr-TR");
+      if (repDateEl) repDateEl.textContent = formattedDate;
+      let protocolCode = "VT-LOCAL";
       if (repCodeEl) {
-        const dateCode = [reportNow.getFullYear(), String(reportNow.getMonth()+1).padStart(2,"0"), String(reportNow.getDate()).padStart(2,"0")].join("");
+        const dateCode = [reportNow.getFullYear(), String(reportNow.getMonth() + 1).padStart(2, "0"), String(reportNow.getDate()).padStart(2, "0")].join("");
         const userCode = String(activeUserId || "LOCAL").replace(/[^a-z0-9]/gi, "").slice(-4).toUpperCase() || "LOCAL";
-        repCodeEl.textContent = `VT-${dateCode}-${userCode}`;
+        protocolCode = `VT-${dateCode}-${userCode}`;
+        repCodeEl.textContent = protocolCode;
+      }
+
+      const footerDatePageEl = document.getElementById("reportFooterDateAndPage");
+      if (footerDatePageEl) {
+        footerDatePageEl.textContent = `Rapor Tarihi: ${formattedDate} | Kod: ${protocolCode} | Format: ${isConcise ? "Kısa Doktor Raporu (1–2 Sayfa Özeti)" : "Ayrıntılı Klinik Ek Rapor"}`;
       }
 
       document.getElementById("repPatientName").textContent = p.name || "Kullanıcı";
-      document.getElementById("repPatientAgeGender").textContent = `${p.age} Yaş / ${p.gender === 'E' ? 'Erkek' : 'Kadın'}`;
+      document.getElementById("repPatientAgeGender").textContent = `${p.age} Yaş / ${p.gender === "E" ? "Erkek" : "Kadın"}`;
       document.getElementById("repPatientHeightWeight").textContent = `${p.height} cm / ${p.weight} kg`;
       document.getElementById("repPatientBmi").textContent = `${p.bmi} (${p.bmiCategory})`;
       const chronicLabels = {
@@ -25,79 +119,352 @@ function renderReportTab() {
         diabetes: "Diyabet / insülin direnci",
         ppi: "Mide koruyucu (PPI)",
         metformin: "Metformin",
-        diuretic: "Tansiyon diüretiği"
+        diuretic: "Tansiyon diüretiği",
+        levothyroxine: "Tiroid ilacı (Levotiroksin)"
       };
-      document.getElementById("repPatientChronic").textContent = p.chronic?.length
-        ? p.chronic.map(item => chronicLabels[item] || item).join(", ")
+      const chronicTextParts = [
+        ...(Array.isArray(p.chronic) ? p.chronic.map(item => chronicLabels[item] || item) : []),
+        ...(Array.isArray(p.medications) ? p.medications : [])
+      ].filter((v, idx, arr) => v && arr.indexOf(v) === idx);
+      document.getElementById("repPatientChronic").textContent = chronicTextParts.length
+        ? chronicTextParts.join(", ")
         : "Kayıt yok";
 
-      const repLabBody = document.getElementById("repLabTableBody");
-      if (repLabBody) {
-        const labs = state.labValues || {};
-        const egfr = calculateCKDEPI_eGFR(labs.creatinine, p.age, p.gender);
-        const egfrNote = document.getElementById("egfrInterpretationNote");
-        if (egfrNote) egfrNote.textContent = egfr ? `eGFR (CKD-EPI 2021): ${egfr.egfr} mL/dk/1,73 m²` : "";
-        const latestLabRecord = state.labHistory?.[0] || null;
-        const reportReference = key => String(latestLabRecord?.references?.[key] || state.labReferences?.[key] || "").trim();
-        const latestDateEl = document.getElementById("reportLatestLabDate");
-        if (latestDateEl) latestDateEl.textContent = latestLabRecord?.date ? `Son kayıt tarihi: ${latestLabRecord.date}` : "";
-        const list = [
-          { name: "25-OH Vitamin D3", val: labs.d3, ref: reportReference('d3'), key: 'd3' },
-          { name: "Vitamin B12 (Kobalamin)", val: labs.b12, ref: reportReference('b12'), key: 'b12' },
-          { name: "Ferritin (Demir Deposu)", val: labs.ferritin, ref: reportReference('ferritin'), key: 'ferritin' },
-          { name: "Serum Magnezyum", val: labs.mg, ref: reportReference('mg'), key: 'mg' },
-          { name: "Total Kalsiyum", val: labs.ca, ref: reportReference('ca'), key: 'ca' },
-          { name: "Serum Çinko", val: labs.zinc, ref: reportReference('zinc'), key: 'zinc' },
-          { name: "Serum Kreatinin", val: labs.creatinine, ref: reportReference('creatinine'), key: 'creatinine' },
-          { name: "Folat (B9 Vitamini)", val: labs.folate, ref: reportReference('folate'), key: 'folate' },
-          { name: "ALT (Alanin Aminotransferaz)", val: labs.alt, ref: reportReference('alt'), key: 'alt' },
-          { name: "Hemoglobin (Hb)", val: labs.hb, ref: reportReference('hb'), key: 'hb' },
-          { name: "MCV", val: labs.mcv, ref: reportReference('mcv'), key: 'mcv' },
-          { name: "CRP", val: labs.crp, ref: reportReference('crp'), key: 'crp' }
-        ];
+      // 2. HASTANIN BAŞVURU NEDENİ VE SEÇİLMİŞ TEMEL BELİRTİLERİ
+      const activeKeys = Array.from(state.selectedSymptoms || []).filter(k => ANAMNESIS_DICTIONARY[k]);
+      const resolvedKeys = Array.from(state.resolvedSymptoms || []).filter(k => ANAMNESIS_DICTIONARY[k]);
 
-        const enteredLabs = list.filter(item => item.val !== null && item.val !== undefined && item.val !== "");
-        if (enteredLabs.length) document.getElementById("repLabSectionWrapper")?.classList.remove("hidden");
-        const units = { d3: "ng/mL", b12: "pg/mL", ferritin: "ng/mL", mg: "mg/dL", ca: "mg/dL", zinc: "µg/dL", creatinine: "mg/dL", folate: "ng/mL", alt: "U/L", hb: "g/dL", mcv: "fL", crp: "mg/L" };
-        const crpNum = parseLabNumericValue(labs.crp);
-        const hbNum = parseLabNumericValue(labs.hb);
-        repLabBody.innerHTML = enteredLabs.length ? enteredLabs.map(item => {
+      const conciseSymptomsSection = document.getElementById("repConciseSymptomsSection");
+      const conciseSymptomsList = document.getElementById("repConciseSymptomsList");
+      const conciseSymptomsBadge = document.getElementById("repConciseSymptomsCountBadge");
+      if (isConcise && conciseSymptomsSection && conciseSymptomsList && (activeKeys.length > 0 || resolvedKeys.length > 0)) {
+        conciseSymptomsSection.classList.remove("hidden");
+        if (conciseSymptomsBadge) {
+          conciseSymptomsBadge.textContent = `${activeKeys.length} aktif${resolvedKeys.length > 0 ? `, ${resolvedKeys.length} gerileyen` : ""} belirti`;
+        }
+        const activeHtml = activeKeys.length > 0 ? `
+          <div>
+            <span class="font-bold text-navy-900">Aktif Başvuru Belirtileri:</span>
+            <ul class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              ${activeKeys.map(k => {
+                const item = ANAMNESIS_DICTIONARY[k];
+                return `<li class="flex items-start gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
+                  <span class="font-black text-amber-700 shrink-0">•</span>
+                  <span><strong class="text-navy-900">${escapeHtmlText(item.medicalName || "Belirti")}:</strong> <span class="text-slate-600">${escapeHtmlText(item.question)}</span></span>
+                </li>`;
+              }).join("")}
+            </ul>
+          </div>
+        ` : "";
+        const resolvedHtml = resolvedKeys.length > 0 ? `
+          <div class="pt-1 border-t border-slate-200/80 text-[11px] text-emerald-900">
+            <strong class="font-bold">Takipte Gerileyen / Çözümlenen Belirtiler:</strong>
+            ${resolvedKeys.map(k => escapeHtmlText(ANAMNESIS_DICTIONARY[k]?.medicalName || ANAMNESIS_DICTIONARY[k]?.question || k)).join(", ")}
+          </div>
+        ` : "";
+        conciseSymptomsList.innerHTML = activeHtml + resolvedHtml;
+      }
+
+      // 3. KLİNİK AÇIDAN İLGİLİ LABORATUVAR BULGULARI (Her iki modda ortak, Kısa Raporda referans dışı bulgular üstte sıralanır)
+      const repLabBody = document.getElementById("repLabTableBody");
+      const labs = state.labValues || {};
+      const egfr = calculateCKDEPI_eGFR(labs.creatinine, p.age, p.gender);
+      const egfrNote = document.getElementById("egfrInterpretationNote");
+      const latestLabRecord = state.labHistory?.[0] || null;
+      const prevLabRecord = (state.labHistory && state.labHistory.length >= 2) ? state.labHistory[1] : null;
+      const reportReference = key => String(latestLabRecord?.references?.[key] || state.labReferences?.[key] || "").trim();
+      const defaultRefMap = typeof getVitaAppLabReferenceMap === "function" ? getVitaAppLabReferenceMap(p.gender || "K") : {};
+      const latestDateEl = document.getElementById("reportLatestLabDate");
+      if (latestDateEl) {
+        latestDateEl.textContent = latestLabRecord?.date
+          ? `Son tahlil tarihi: ${latestLabRecord.date}${prevLabRecord?.date ? ` (Önceki: ${prevLabRecord.date})` : ""}`
+          : "";
+      }
+
+      const list = [
+        { name: "25-OH Vitamin D3", val: labs.d3, ref: reportReference("d3"), key: "d3" },
+        { name: "Vitamin B12 (Kobalamin)", val: labs.b12, ref: reportReference("b12"), key: "b12" },
+        { name: "Ferritin (Demir Deposu)", val: labs.ferritin, ref: reportReference("ferritin"), key: "ferritin" },
+        { name: "Hemoglobin (Hb)", val: labs.hb, ref: reportReference("hb"), key: "hb" },
+        { name: "MCV (Eritrosit Hacmi)", val: labs.mcv, ref: reportReference("mcv"), key: "mcv" },
+        { name: "CRP (Akut Faz Yanıtı)", val: labs.crp, ref: reportReference("crp"), key: "crp" },
+        { name: "Serum Kreatinin", val: labs.creatinine, ref: reportReference("creatinine"), key: "creatinine" },
+        { name: "ALT (Alanin Aminotransferaz)", val: labs.alt, ref: reportReference("alt"), key: "alt" },
+        { name: "Total Kalsiyum", val: labs.ca, ref: reportReference("ca"), key: "ca" },
+        { name: "Serum Magnezyum", val: labs.mg, ref: reportReference("mg"), key: "mg" },
+        { name: "Folat (B9 Vitamini)", val: labs.folate, ref: reportReference("folate"), key: "folate" },
+        { name: "Serum Çinko", val: labs.zinc, ref: reportReference("zinc"), key: "zinc" }
+      ];
+
+      const units = { d3: "ng/mL", b12: "pg/mL", ferritin: "ng/mL", mg: "mg/dL", ca: "mg/dL", zinc: "µg/dL", creatinine: "mg/dL", folate: "ng/mL", alt: "U/L", hb: "g/dL", mcv: "fL", crp: "mg/L" };
+      const crpNum = parseLabNumericValue(labs.crp);
+      const hbNum = parseLabNumericValue(labs.hb);
+
+      const enteredLabs = list
+        .filter(item => item.val !== null && item.val !== undefined && item.val !== "")
+        .map(item => {
           const numVal = parseLabNumericValue(item.val);
-          let badgeHtml = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">Değerlendirildi</span>`;
+          const ev = numVal !== null
+            ? KDSSRuleEngine.evaluate(item.key, numVal, p.gender || "K", item.ref, { age: p.age, crp: crpNum, hb: hbNum })
+            : null;
+          let severityRank = 3;
+          if (ev) {
+            if (ev.isUrgent || ev.isToxic || ev.tier === "critical_low" || ev.tier === "critical_high") severityRank = 0;
+            else if (ev.isLow || ev.isHigh || ev.status === "below_ref" || ev.status === "above_ref") severityRank = 1;
+            else if (ev.isBorderline || ev.status === "borderline") severityRank = 2;
+          }
+          return { ...item, numVal, ev, severityRank };
+        });
+
+      if (isConcise) {
+        enteredLabs.sort((a, b) => a.severityRank - b.severityRank);
+      }
+
+      if (repLabBody) {
+        if (enteredLabs.length > 0) {
+          document.getElementById("repLabSectionWrapper")?.classList.remove("hidden");
+        }
+        repLabBody.innerHTML = enteredLabs.length ? enteredLabs.map(item => {
+          const ev = item.ev;
+          let badgeHtml = `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">[DEĞERLENDİRİLDİ]</span>`;
           let rowClass = "";
-          if (numVal !== null) {
-            const ev = KDSSRuleEngine.evaluate(item.key, numVal, p.gender || "K", item.ref, { age: p.age, crp: crpNum, hb: hbNum });
-            if (ev) {
-              if (ev.isUrgent || ev.isToxic || ev.tier === "critical_low" || ev.tier === "critical_high") {
-                badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 text-rose-900 border border-rose-300"><i class="fa-solid fa-triangle-exclamation text-rose-600"></i> Kritik / Alarm (${escapeHtmlText(ev.statusText)})</span>`;
-                rowClass = "bg-rose-50/50";
-              } else if (ev.isLow || ev.status === "below_ref") {
-                badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300"><i class="fa-solid fa-arrow-down text-amber-700"></i> ${escapeHtmlText(ev.statusText || "Referans Altı")}</span>`;
-                rowClass = "bg-amber-50/35";
-              } else if (ev.isHigh || ev.status === "above_ref") {
-                badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-900 border border-orange-300"><i class="fa-solid fa-arrow-up text-orange-700"></i> ${escapeHtmlText(ev.statusText || "Referans Üstü - İnceleme")}</span>`;
-                rowClass = "bg-orange-50/35";
-              } else if (ev.isBorderline || ev.status === "borderline") {
-                badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200"><i class="fa-solid fa-circle-exclamation text-amber-600"></i> ${escapeHtmlText(ev.statusText || "Sınırda / Gri Bölge")}</span>`;
-              } else if (ev.status === "not_assessable") {
-                badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300">${escapeHtmlText(ev.statusText)}</span>`;
-              } else {
-                badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200"><i class="fa-solid fa-check text-emerald-600"></i> ${escapeHtmlText(ev.statusText || "Referans Aralığında")}</span>`;
-              }
+          if (ev) {
+            if (ev.isUrgent || ev.isToxic || ev.tier === "critical_low" || ev.tier === "critical_high") {
+              badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-950 border border-rose-400">[KRİTİK ALARM] ${escapeHtmlText(ev.statusText)}</span>`;
+              rowClass = "bg-rose-50/50";
+            } else if (ev.isLow || ev.status === "below_ref") {
+              badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-950 border border-amber-400">[DÜŞÜK] ${escapeHtmlText(ev.statusText || "Referans Altı")}</span>`;
+              rowClass = "bg-amber-50/35";
+            } else if (ev.isHigh || ev.status === "above_ref") {
+              badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-950 border border-orange-400">[YÜKSEK] ${escapeHtmlText(ev.statusText || "Referans Üstü")}</span>`;
+              rowClass = "bg-orange-50/35";
+            } else if (ev.isBorderline || ev.status === "borderline") {
+              badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-300">[SINIRDA] ${escapeHtmlText(ev.statusText || "Sınırda / Gri Bölge")}</span>`;
+            } else if (ev.status === "not_assessable") {
+              badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">${escapeHtmlText(ev.statusText)}</span>`;
+            } else {
+              badgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-900 border border-emerald-300">[NORMAL] ${escapeHtmlText(ev.statusText || "Referans Aralığında")}</span>`;
             }
           }
+
+          let trendInlineHtml = "";
+          if (isConcise && prevLabRecord && item.numVal !== null) {
+            const prevVal = parseLabNumericValue(prevLabRecord[item.key]);
+            if (prevVal !== null) {
+              const delta = Number((item.numVal - prevVal).toFixed(2));
+              const sign = delta > 0 ? "+" : "";
+              trendInlineHtml = `<span class="block text-[10px] font-normal text-slate-500 mt-0.5">Önceki (${escapeHtmlText(prevLabRecord.date || "Önceki")}): ${prevVal} → Δ ${sign}${delta} ${units[item.key] || ""}</span>`;
+            }
+          }
+
+          const refDisplay = item.ref
+            ? escapeHtmlText(item.ref)
+            : (defaultRefMap[item.key] ? `<span class="text-slate-500">${escapeHtmlText(defaultRefMap[item.key])} <em class="text-[9px]">(Genel ref.)</em></span>` : "Belirtilmedi");
+
           return `
             <tr class="${rowClass}">
-              <td class="p-2 font-bold text-navy-900">${escapeHtmlText(item.name)}</td>
-              <td class="p-2 font-mono font-bold">${escapeHtmlText(item.val)} <span class="font-normal text-slate-500">${units[item.key] || ""}</span></td>
-              <td class="p-2 text-slate-600">${item.ref ? escapeHtmlText(item.ref) : "—"}</td>
+              <td class="p-2 font-bold text-navy-900">${escapeHtmlText(item.name)}${trendInlineHtml}</td>
+              <td class="p-2 font-mono font-bold whitespace-nowrap">${escapeHtmlText(item.val)} <span class="font-normal text-slate-600">${units[item.key] || ""}</span></td>
+              <td class="p-2 text-slate-700">${refDisplay}</td>
               <td class="p-2">${badgeHtml}</td>
             </tr>
           `;
-        }).join('') : `<tr><td class="p-3 text-center text-slate-400 italic" colspan="4">Kayıtlı laboratuvar sonucu yok.</td></tr>`;
-        if (egfrNote) egfrNote.textContent = egfr ? `eGFR (CKD-EPI 2021): ${egfr.egfr} mL/dk/1,73 m²` : "";
+        }).join("") : `<tr><td class="p-3 text-center text-slate-400 italic" colspan="4">Kayıtlı laboratuvar sonucu yok.</td></tr>`;
+
+        if (egfrNote) {
+          egfrNote.textContent = egfr
+            ? `Hesaplanan eGFR (CKD-EPI 2021): ${egfr.egfr} mL/dk/1,73 m² — Evre ${egfr.stage} (${egfr.desc})`
+            : "";
+        }
       }
 
+      // 4. MEVCUT İLAÇ VE TAKVİYE BİLGİLERİNİN ÖZETİ (Kısa Rapor Bölümü - Boşsa Gizlenir)
+      const conciseMedSupSection = document.getElementById("repConciseMedSupplementSection");
+      const conciseMedSupBody = document.getElementById("repConciseMedSupplementBody");
+      const products = Array.isArray(state.supplements) ? state.supplements : [];
+      if (isConcise && conciseMedSupSection && conciseMedSupBody && (chronicTextParts.length > 0 || products.length > 0)) {
+        conciseMedSupSection.classList.remove("hidden");
+        const medRows = chronicTextParts.map(medName => `
+          <tr class="bg-rose-50/25">
+            <td class="p-2 font-bold text-rose-900 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-100 text-rose-900 border border-rose-300">KRONİK / İLAÇ</span></td>
+            <td class="p-2 font-bold text-navy-900">${escapeHtmlText(medName)}</td>
+            <td class="p-2 text-slate-600">Hasta profilinde beyan edilen düzenli ilaç / klinik durum</td>
+          </tr>
+        `);
+        const supRows = products.map(item => `
+          <tr>
+            <td class="p-2 font-bold text-teal-900 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-teal-50 text-teal-900 border border-teal-300">TAKVİYE</span></td>
+            <td class="p-2 font-bold text-navy-900">${escapeHtmlText(item.name || "Ürün")} <span class="font-normal text-slate-500">(${escapeHtmlText(item.selectedForm || item.form || "Standart form")})</span></td>
+            <td class="p-2 text-slate-700">${escapeHtmlText(item.doseText || item.dosageText || "Miktar belirtilmemiş")}${item.timing ? ` • ${escapeHtmlText(item.timing)}` : ""}</td>
+          </tr>
+        `);
+        conciseMedSupBody.innerHTML = `
+          <table class="w-full text-left text-xs min-w-[380px]">
+            <thead class="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
+              <tr>
+                <th class="p-2">Kategori</th>
+                <th class="p-2">İlaç / Takviye ve Farmasötik Form</th>
+                <th class="p-2">Doz / Kullanım Bilgisi</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200">${[...medRows, ...supRows].join("")}</tbody>
+          </table>
+        `;
+      }
+
+      // Profesör Doktor Klinik Sentez Verisini Oluştur ve Hem Kısa Hem Ayrıntılı Raporda Kullan
+      renderProfessorClinicalSynthesis(false);
+      const synthData = state.lastProfessorSynthesis || buildProfessorClinicalSynthesisData();
+
+      // 5. HEKİMİN DEĞERLENDİRMESİNE SUNULAN ÖNEMLİ NOKTALAR (Kısa Rapor Bölümü - Tekrarsız & Öz)
+      const conciseClinicalSection = document.getElementById("repConciseClinicalPointsSection");
+      const conciseClinicalList = document.getElementById("repConciseClinicalPointsList");
+      const conciseClinicalBadge = document.getElementById("repConciseClinicalPointsBadge");
+      if (isConcise && conciseClinicalSection && conciseClinicalList) {
+        const importantPoints = [];
+        const seenTitles = new Set();
+        const addPoint = (tag, tagClass, title, text) => {
+          const normKey = String(title || "").toLowerCase().trim();
+          if (!normKey || seenTitles.has(normKey)) return;
+          seenTitles.add(normKey);
+          importantPoints.push({ tag, tagClass, title, text });
+        };
+
+        // 5a. Kritik ve yüksek öncelikli klinik alarmlar
+        (synthData.alarms || []).forEach(a => {
+          const isCrit = a.level === "critical";
+          addPoint(
+            isCrit ? "KRİTİK ALARM" : "KLİNİK UYARI",
+            isCrit ? "bg-rose-100 text-rose-950 border-rose-400" : "bg-amber-100 text-amber-950 border-amber-400",
+            a.title,
+            `${a.detail} Öneri: ${a.action}`
+          );
+        });
+
+        // 5b. Böbrek Fonksiyonu (Kreatinin / eGFR) ve İlaç Güvenliği Çapraz Kontrolü
+        if (typeof parseKidneyFunctionAndCompareMedications === "function") {
+          const kidneyRep = parseKidneyFunctionAndCompareMedications();
+          if (kidneyRep && kidneyRep.hasKidneyData && (kidneyRep.isReducedKidneyFunction || (kidneyRep.medicationWarnings && kidneyRep.medicationWarnings.length > 0))) {
+            (kidneyRep.medicationWarnings || []).forEach(w => {
+              addPoint(
+                w.severity === "critical" ? "BÖBREK GÜVENLİĞİ" : "RENAL DOZ İZLEMİ",
+                w.severity === "critical" ? "bg-rose-100 text-rose-950 border-rose-400" : "bg-amber-100 text-amber-950 border-amber-400",
+                `${w.drugLabel} — Böbrek Fonksiyonu Çapraz Uyarısı`,
+                `${w.clinicalRisk} (${w.recommendation})`
+              );
+            });
+          }
+        }
+
+        // 5c. İlaç-Besin ve Emilim Çakışmaları
+        (synthData.interactions || []).forEach(inter => {
+          addPoint(
+            "ETKİLEŞİM",
+            inter.severity === "danger" ? "bg-rose-50 text-rose-900 border-rose-300" : "bg-amber-50 text-amber-900 border-amber-300",
+            inter.title.replace(/^[⛔⚠️]\s*/, ""),
+            inter.actionText
+          );
+        });
+        (synthData.medicationDepletionNotes || []).forEach((note, idx) => {
+          addPoint(
+            "İLAÇ ETKİSİ",
+            "bg-slate-100 text-slate-800 border-slate-300",
+            `Kronik İlaç Kaynaklı Mikronutrient Etkisi #${idx + 1}`,
+            note
+          );
+        });
+
+        // 5d. Semptom – Tahlil Uyum Bulguları (Yalnızca doğrudan konkordan olanlar)
+        const concordantSymptoms = (synthData.symptomCorrelations || []).filter(c => c.type === "concordant");
+        if (concordantSymptoms.length > 0) {
+          addPoint(
+            "SEMPTOM-TAHLİL UYUMU",
+            "bg-teal-50 text-teal-950 border-teal-300",
+            `${concordantSymptoms.map(c => c.symptom).join(", ")} ile Laboratuvar Bulgusu Örtüşmesi`,
+            concordantSymptoms.map(c => c.detail).join(" ")
+          );
+        }
+
+        if (importantPoints.length > 0) {
+          conciseClinicalSection.classList.remove("hidden");
+          if (conciseClinicalBadge) {
+            conciseClinicalBadge.textContent = `${importantPoints.length} klinik değerlendirme noktası`;
+          }
+          conciseClinicalList.innerHTML = importantPoints.map(pt => `
+            <div class="p-2.5 rounded-lg bg-slate-50/80 border border-slate-200">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="px-1.5 py-0.5 rounded text-[9px] font-black border ${pt.tagClass}">[${escapeHtmlText(pt.tag)}]</span>
+                <strong class="font-bold text-navy-900">${escapeHtmlText(pt.title)}</strong>
+              </div>
+              <p class="mt-1 text-[11px] text-slate-700 leading-relaxed">${escapeHtmlText(pt.text)}</p>
+            </div>
+          `).join("");
+        } else if (enteredLabs.length > 0 || activeKeys.length > 0) {
+          conciseClinicalSection.classList.remove("hidden");
+          if (conciseClinicalBadge) conciseClinicalBadge.textContent = "Acil alarm saptanmadı";
+          conciseClinicalList.innerHTML = `
+            <p class="text-slate-700 leading-relaxed">
+              <strong class="text-emerald-800">[STABİL ÖN ÖZET]</strong> Mevcut tahlil ve ilaç kayıtlarında akut toksisite, organ güvenlik kilidi veya majör ilaç–besin çakışması saptanmamıştır. Bulgular hekim muayenesiyle birlikte değerlendirilmelidir.
+            </p>
+          `;
+        }
+      }
+
+      // 6. EKSİK VEYA DOĞRULANMASI GEREKEN BİLGİLER (Kısa Rapor Bölümü - Boşsa Gizlenir)
+      const conciseMissingSection = document.getElementById("repConciseMissingInfoSection");
+      const conciseMissingList = document.getElementById("repConciseMissingInfoList");
+      if (isConcise && conciseMissingSection && conciseMissingList) {
+        const missingItems = [];
+
+        // 6a. Referans aralığı girilmemiş tahliller
+        const missingRefLabs = enteredLabs.filter(l => !l.ref).map(l => l.name);
+        if (missingRefLabs.length > 0) {
+          missingItems.push(`<strong>Hastane / Laboratuvar Referans Aralığı Doğrulaması:</strong> ${escapeHtmlText(missingRefLabs.join(", "))} için kullanıcı tarafından özel hastane referans aralığı girilmediğinden standart yetişkin referans sınırları baz alınmıştır; sonuç kağıdındaki kit referansıyla doğrulanmalıdır.`);
+        }
+
+        // 6b. 90 günden eski tahlil uyarısı
+        if (latestLabRecord?.date) {
+          const parsedTime = Date.parse(latestLabRecord.date);
+          if (!isNaN(parsedTime)) {
+            const diffDays = Math.floor((Date.now() - parsedTime) / (1000 * 60 * 60 * 24));
+            if (diffDays > 90) {
+              missingItems.push(`<strong>Güncellik Kontrolü (${diffDays} Günlük Tahlil):</strong> Son tahlil tarihi (${escapeHtmlText(latestLabRecord.date)}) üzerinden 3 aydan uzun süre geçmiştir; güncel biyokimyasal durum için kontrol tetkiki gerekebilir.`);
+            }
+          }
+        }
+
+        // 6c. Seçilmiş belirtiler için eksik tahliller
+        const untestedCorrelations = (synthData.symptomCorrelations || []).filter(c => c.type === "untested");
+        if (untestedCorrelations.length > 0) {
+          missingItems.push(`<strong>Belirti Odaklı Eksik Tetkikler:</strong> Bildirilen <em>${escapeHtmlText(untestedCorrelations.map(c => c.symptom).join(", "))}</em> yakınmalarının biyokimyasal değerlendirmesi için ilgili tahlil sonuçları henüz sisteme girilmemiştir.`);
+        }
+
+        // 6d. Ferritin var ama Hb/MCV/CRP eksikse
+        if (labs.ferritin !== null && labs.ferritin !== undefined && labs.ferritin !== "") {
+          const missingAnemiaPanel = [];
+          if (hbNum === null) missingAnemiaPanel.push("Hemoglobin (Hb)");
+          if (parseLabNumericValue(labs.mcv) === null) missingAnemiaPanel.push("MCV");
+          if (crpNum === null) missingAnemiaPanel.push("CRP (enflamasyon dışlaması)");
+          if (missingAnemiaPanel.length > 0) {
+            missingItems.push(`<strong>Demir/Anemi Paneli Tamamlama Notu:</strong> Ferritin düzeyinin klinik açıdan eksiksiz yorumlanabilmesi için <em>${escapeHtmlText(missingAnemiaPanel.join(", "))}</em> değerlerinin birlikte görülmesi önerilir.`);
+          }
+        }
+
+        // 6e. Kalsiyum girilmişse Albümin/PTH doğrulama notu veya Biotin interferansı
+        if (parseLabNumericValue(labs.ca) !== null) {
+          missingItems.push(`<strong>Düzeltilmiş Kalsiyum Doğrulaması:</strong> Total kalsiyum yorumu için serum Albümin düzeyi (Payne düzeltmesi) ve gerekirse iPTH kontrolü hekimce değerlendirilmelidir.`);
+        }
+        if (Boolean(document.getElementById("repSynthBiotinContext")?.checked)) {
+          missingItems.push(`<strong>Pre-Analitik Biotin (B7) İnterferansı:</strong> Son 72 saatte biotin kullanımı bildirildiğinden immünoassay bazlı B12, D3, Folat ve tiroid testlerinde yalancı sapma olasılığı doğrulanmalıdır.`);
+        }
+
+        if (missingItems.length > 0) {
+          conciseMissingSection.classList.remove("hidden");
+          conciseMissingList.innerHTML = `<ul class="list-disc pl-4 space-y-1">${missingItems.map(item => `<li>${item}</li>`).join("")}</ul>`;
+        }
+      }
+
+      // AYRINTILI KLİNİK EK RAPOR TABLOLARI (Detailed Mod için doldurulmaya devam eder)
       const repTrendBody = document.getElementById("repTrendTableBody");
       const trendSection = document.getElementById("repTrendSectionWrapper");
       const thPrev = document.getElementById("repThPrevDate");
@@ -110,18 +477,18 @@ function renderReportTab() {
           if (thCurr) thCurr.textContent = `Son (${curr.date})`;
 
           const tList = [
-            { name: "25-OH Vitamin D3", key: 'd3', unit: 'ng/mL' },
-            { name: "Vitamin B12", key: 'b12', unit: 'pg/mL' },
-            { name: "Ferritin", key: 'ferritin', unit: 'ng/mL' },
-            { name: "Magnezyum", key: 'mg', unit: 'mg/dL' },
-            { name: "Total Kalsiyum", key: 'ca', unit: 'mg/dL' },
-            { name: "Serum Çinko", key: 'zinc', unit: 'µg/dL' },
-            { name: "Kreatinin", key: 'creatinine', unit: 'mg/dL' },
-            { name: "Folat (B9)", key: 'folate', unit: 'ng/mL' },
-            { name: "ALT (Karaciğer)", key: 'alt', unit: 'U/L' },
-            { name: "Hemoglobin", key: 'hb', unit: 'g/dL' },
-            { name: "MCV", key: 'mcv', unit: 'fL' },
-            { name: "CRP", key: 'crp', unit: 'mg/L' }
+            { name: "25-OH Vitamin D3", key: "d3", unit: "ng/mL" },
+            { name: "Vitamin B12", key: "b12", unit: "pg/mL" },
+            { name: "Ferritin", key: "ferritin", unit: "ng/mL" },
+            { name: "Magnezyum", key: "mg", unit: "mg/dL" },
+            { name: "Total Kalsiyum", key: "ca", unit: "mg/dL" },
+            { name: "Serum Çinko", key: "zinc", unit: "µg/dL" },
+            { name: "Kreatinin", key: "creatinine", unit: "mg/dL" },
+            { name: "Folat (B9)", key: "folate", unit: "ng/mL" },
+            { name: "ALT (Karaciğer)", key: "alt", unit: "U/L" },
+            { name: "Hemoglobin", key: "hb", unit: "g/dL" },
+            { name: "MCV", key: "mcv", unit: "fL" },
+            { name: "CRP", key: "crp", unit: "mg/L" }
           ];
 
           const rowsHtml = tList.filter(t => (curr[t.key] !== null && curr[t.key] !== undefined && curr[t.key] !== "") || (prev[t.key] !== null && prev[t.key] !== undefined && prev[t.key] !== "")).map(t => {
@@ -135,15 +502,15 @@ function renderReportTab() {
             return `
               <tr>
                 <td class="p-2 font-bold text-navy-900">${escapeHtmlText(t.name)}</td>
-                <td class="p-2 font-mono">${escapeHtmlText(pV !== null && pV !== undefined && pV !== "" ? pV : '—')}</td>
-                <td class="p-2 font-mono font-bold">${escapeHtmlText(cV !== null && cV !== undefined && cV !== "" ? cV : '—')}</td>
+                <td class="p-2 font-mono">${escapeHtmlText(pV !== null && pV !== undefined && pV !== "" ? pV : "—")}</td>
+                <td class="p-2 font-mono font-bold">${escapeHtmlText(cV !== null && cV !== undefined && cV !== "" ? cV : "—")}</td>
                 <td class="p-2 font-mono text-slate-600">${escapeHtmlText(change)}</td>
               </tr>
             `;
-          }).join('');
+          }).join("");
 
           repTrendBody.innerHTML = rowsHtml;
-          if (rowsHtml && trendSection) trendSection.classList.remove("hidden");
+          if (rowsHtml && trendSection && !isConcise) trendSection.classList.remove("hidden");
         } else {
           if (trendSection) trendSection.classList.add("hidden");
           if (thPrev) thPrev.textContent = "Önceki";
@@ -154,32 +521,29 @@ function renderReportTab() {
 
       const repAnamnesisBody = document.getElementById("repAnamnesisTableBody");
       if (repAnamnesisBody) {
-        const activeKeys = Array.from(state.selectedSymptoms || []).filter(k => ANAMNESIS_DICTIONARY[k]);
-        const resolvedKeys = Array.from(state.resolvedSymptoms || []).filter(k => ANAMNESIS_DICTIONARY[k]);
-
         if (activeKeys.length > 0 || resolvedKeys.length > 0) {
-          document.getElementById("repAnamnesisWrapper")?.classList.remove("hidden");
+          if (!isConcise) document.getElementById("repAnamnesisWrapper")?.classList.remove("hidden");
           const activeRows = activeKeys.map(k => {
             const item = ANAMNESIS_DICTIONARY[k];
-            if (!item) return '';
+            if (!item) return "";
             return `
               <tr>
-                <td class="p-2 font-medium">${escapeHtmlText(item.question)}</td>
+                <td class="p-2 font-medium"><strong class="text-navy-900">${escapeHtmlText(item.medicalName || "")}:</strong> ${escapeHtmlText(item.question)}</td>
                 <td class="p-2 text-amber-700 font-bold">Aktif</td>
               </tr>
             `;
           });
           const resolvedRows = resolvedKeys.map(k => {
             const item = ANAMNESIS_DICTIONARY[k];
-            if (!item) return '';
+            if (!item) return "";
             return `
               <tr class="bg-emerald-50/40">
-                <td class="p-2 font-medium">${escapeHtmlText(item.question)}</td>
+                <td class="p-2 font-medium"><strong class="text-navy-900">${escapeHtmlText(item.medicalName || "")}:</strong> ${escapeHtmlText(item.question)}</td>
                 <td class="p-2 text-emerald-700 font-bold">Geriledi</td>
               </tr>
             `;
           });
-          repAnamnesisBody.innerHTML = [...activeRows, ...resolvedRows].join('');
+          repAnamnesisBody.innerHTML = [...activeRows, ...resolvedRows].join("");
         } else {
           repAnamnesisBody.innerHTML = `<tr><td colspan="2" class="p-3 text-center text-slate-400 italic">Kayıtlı belirti yok.</td></tr>`;
         }
@@ -188,28 +552,25 @@ function renderReportTab() {
       const repFindings = document.getElementById("repFindingsContainer");
       if (repFindings) {
         if (state.lastCDSS && state.lastCDSS.findings && state.lastCDSS.findings.length > 0) {
-          document.getElementById("repFindingsSectionWrapper")?.classList.remove("hidden");
+          if (!isConcise) document.getElementById("repFindingsSectionWrapper")?.classList.remove("hidden");
           repFindings.innerHTML = state.lastCDSS.findings.map(f => `
             <div class="p-2.5 rounded-lg bg-white border border-slate-200">
               <strong class="text-navy-900 block">${escapeHtmlText(f.title)}</strong>
               <p class="text-slate-600 mt-0.5 leading-relaxed">${escapeHtmlText(f.detail)}</p>
             </div>
-          `).join('');
+          `).join("");
         } else repFindings.innerHTML = "";
       }
 
       const currentProducts = document.getElementById("repCurrentSupplements");
       if (currentProducts) {
-        const products = Array.isArray(state.supplements) ? state.supplements : [];
-        if (products.length) document.getElementById("repSupplementsSectionWrapper")?.classList.remove("hidden");
+        if (products.length && !isConcise) document.getElementById("repSupplementsSectionWrapper")?.classList.remove("hidden");
         currentProducts.innerHTML = products.length ? `
           <table class="w-full text-left text-xs">
             <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200"><tr><th class="p-2">Ürün</th><th class="p-2">Form</th><th class="p-2">Kayıtlı miktar</th></tr></thead>
             <tbody class="divide-y divide-slate-100">${products.map(item => `<tr><td class="p-2 font-bold text-navy-900">${escapeHtmlText(item.name || "Ürün")}</td><td class="p-2">${escapeHtmlText(item.selectedForm || item.form || "—")}</td><td class="p-2">${escapeHtmlText(item.doseText || item.dosageText || "Belirtilmemiş")}</td></tr>`).join("")}</tbody>
           </table>` : `<p class="p-3 text-xs text-slate-500">Kayıtlı ilaç/takviye ürünü yok.</p>`;
       }
-
-      renderProfessorClinicalSynthesis(false);
     }
 
     /* ========================================================================= */
@@ -669,16 +1030,90 @@ function renderReportTab() {
 
     function updateNotificationToggleUI() {
       const btn = document.getElementById("drawerNotifToggleBtn");
-      const enabled = isNotificationEnabled() && isNotificationPermissionGranted();
+      const quickDrawerBtn = document.getElementById("drawerQuickNotifToggleBtn");
+      const quickDrawerDot = document.getElementById("drawerQuickNotifDot");
+      const quickDrawerIcon = document.getElementById("drawerQuickNotifIcon");
+      const quickDrawerBadge = document.getElementById("drawerQuickNotifStateBadge");
+      const homeSwitch = document.getElementById("homeDosageNotifSwitch");
+      const homeKnob = document.getElementById("homeDosageNotifSwitchKnob");
+      const permBadge = document.getElementById("settingsBrowserPermBadge");
+      const hintEl = document.getElementById("settingsNotifCombinedHint");
+
+      const prefEnabled = isNotificationEnabled();
+      const permGranted = isNotificationPermissionGranted();
+      const enabled = prefEnabled && permGranted;
+      const rawPerm = ("Notification" in window) ? Notification.permission : (permGranted ? "granted" : "default");
+
+      if (quickDrawerBtn) {
+        quickDrawerBtn.setAttribute("aria-checked", enabled ? "true" : "false");
+        if (enabled) {
+          quickDrawerBtn.className = "w-full px-3.5 py-2.5 rounded-2xl border border-emerald-500/60 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100 transition flex items-center justify-between gap-2 cursor-pointer shadow-sm";
+          if (quickDrawerDot) quickDrawerDot.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] shrink-0 transition-all";
+          if (quickDrawerIcon) quickDrawerIcon.className = "fa-solid fa-bell text-xs text-emerald-300";
+          if (quickDrawerBadge) {
+            quickDrawerBadge.className = "text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-600 text-white border border-emerald-400/50 shrink-0 transition-all";
+            quickDrawerBadge.textContent = "Açık";
+          }
+        } else {
+          quickDrawerBtn.className = "w-full px-3.5 py-2.5 rounded-2xl border border-rose-500/60 bg-rose-500/15 hover:bg-rose-500/25 text-rose-200 transition flex items-center justify-between gap-2 cursor-pointer shadow-sm";
+          if (quickDrawerDot) quickDrawerDot.className = "w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_#f43f5e] shrink-0 transition-all";
+          if (quickDrawerIcon) quickDrawerIcon.className = "fa-solid fa-bell-slash text-xs text-rose-300";
+          if (quickDrawerBadge) {
+            quickDrawerBadge.className = "text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-600 text-white border border-rose-400/50 shrink-0 transition-all";
+            quickDrawerBadge.textContent = "Kapalı";
+          }
+        }
+      }
+
       if (btn) {
         if (enabled) {
-          btn.className = "text-[9px] px-2 py-0.5 rounded font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 transition cursor-pointer";
+          btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-emerald-100 text-emerald-900 border border-emerald-300 transition cursor-pointer shrink-0";
           btn.textContent = "Açık (Aktif)";
+        } else if (prefEnabled && !permGranted) {
+          btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-amber-100 text-amber-900 border border-amber-300 transition cursor-pointer shrink-0";
+          btn.textContent = "İzin Bekleniyor";
         } else {
-          btn.className = "text-[9px] px-2 py-0.5 rounded font-bold bg-slate-700 hover:bg-slate-600 text-slate-300 transition cursor-pointer";
+          btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 transition cursor-pointer shrink-0";
           btn.textContent = "Kapalı";
         }
       }
+
+      if (homeSwitch && homeKnob) {
+        homeSwitch.setAttribute("aria-checked", enabled ? "true" : "false");
+        if (enabled) {
+          homeSwitch.className = "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-teal-600 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1";
+          homeKnob.className = "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5";
+        } else {
+          homeSwitch.className = "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-300 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1";
+          homeKnob.className = "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0";
+        }
+      }
+
+      if (permBadge) {
+        if (permGranted) {
+          permBadge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200";
+          permBadge.textContent = "Tarayıcı İzni: İzin Verildi";
+        } else if (rawPerm === "denied") {
+          permBadge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200";
+          permBadge.textContent = "Tarayıcı İzni: Reddedildi";
+        } else {
+          permBadge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200";
+          permBadge.textContent = "Tarayıcı İzni: Henüz İstenmedi";
+        }
+      }
+
+      if (hintEl) {
+        if (!permGranted && rawPerm === "denied") {
+          hintEl.textContent = "Tarayıcı bildirim izni engellenmiş. Uygulama içi dozaj bildirimlerinin çalışması için önce tarayıcı iznini açmalısınız.";
+        } else if (!permGranted) {
+          hintEl.textContent = "Uygulama içi dozaj bildirimi açıldığında tarayıcıdan bildirim izni istenir.";
+        } else if (enabled) {
+          hintEl.textContent = "Tarayıcı izni ve uygulama içi dozaj hatırlatıcısı aktif.";
+        } else {
+          hintEl.textContent = "Tarayıcı izni verildi; uygulama içi dozaj hatırlatıcısı şu an kapalı.";
+        }
+      }
+
       if (typeof window.renderPwaNotificationSmartChecklist === "function") {
         window.renderPwaNotificationSmartChecklist();
       }
@@ -828,11 +1263,11 @@ function renderReportTab() {
       if (input && !input.value) input.value = "";
       if (badge) {
         if (key) {
-          badge.className = "text-[9px] px-1.5 py-0.2 rounded font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40";
-          badge.textContent = "Hazır (Gemini)";
+          badge.className = "text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-800 border border-emerald-200";
+          badge.textContent = "Hazır (Gemini Aktif)";
         } else {
-          badge.className = "text-[9px] px-1.5 py-0.2 rounded font-bold bg-slate-700 text-slate-300";
-          badge.textContent = "Yerel Motor";
+          badge.className = "text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700 border border-slate-200";
+          badge.textContent = "Yerel Asistan Aktif";
         }
       }
       updateAIProviderUI();

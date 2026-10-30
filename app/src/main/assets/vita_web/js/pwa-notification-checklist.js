@@ -981,9 +981,9 @@
 
   window.togglePwaNotificationDrawer = function (forceOpen) {
     if (typeof window.navigateToView === "function") {
-      const homeView = document.getElementById("view-home");
-      if (homeView && homeView.classList.contains("hidden")) {
-        window.navigateToView("view-home");
+      const settingsView = document.getElementById("view-settings");
+      if (settingsView && settingsView.classList.contains("hidden")) {
+        window.navigateToView("view-settings");
       }
     }
     const drawer = document.getElementById("pwaNotificationSmartListDrawer");

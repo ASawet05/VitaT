@@ -117,6 +117,47 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "PortalState": {
+      "title": "PortalState",
+      "description": "Stores the authenticated user's synchronized VitaTakip portal state (profile, lab history, supplements, hydration, symptoms, and clinical notes) in Cloud Firestore.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the authenticated owner."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user (1-100 chars)."
+        },
+        "email": {
+          "type": "string",
+          "description": "Email address of the authenticated Google user (1-120 chars)."
+        },
+        "payloadJson": {
+          "type": "string",
+          "description": "Serialized VitaTakip portal state JSON (2-250000 chars)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation server timestamp (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update server timestamp (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "displayName",
+        "email",
+        "payloadJson",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -131,6 +172,12 @@
         "$ref": "#/entities/VitalLog"
       },
       "description": "Per-user collection of hydration, vital signs, sleep, and health expense logs."
+    },
+    "/users/{userId}/portal_state/{stateId}": {
+      "schema": {
+        "$ref": "#/entities/PortalState"
+      },
+      "description": "Per-user synchronized VitaTakip portal clinical state document."
     }
   }
 }

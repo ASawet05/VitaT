@@ -109,6 +109,39 @@ class VitaRepositoryRuleTest : FirestoreEmulatorTestBase() {
         assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, firestoreException?.code)
     }
 
+    @Test
+    fun saveAndLoadPortalState_authenticatedOwnerAndCrossUserIsolation() = runBlocking {
+        val aliceUid = signInTestUser(ALICE_EMAIL)
+        val aliceRepo = VitaRepository(firestore)
+        val samplePayload = """{"app":"VitaTakip","version":"9.4.0","hydration":{"current":1500,"target":2450}}"""
+
+        val saveResult = withTimeout(DEFAULT_TIMEOUT_MS) {
+            aliceRepo.savePortalState(
+                displayName = "Alice Yılmaz",
+                email = ALICE_EMAIL,
+                payloadJson = samplePayload
+            )
+        }
+        assertTrue(saveResult.isSuccess)
+
+        val loadResult = withTimeout(DEFAULT_TIMEOUT_MS) {
+            aliceRepo.loadPortalState(aliceUid)
+        }
+        assertTrue(loadResult.isSuccess)
+        assertEquals(samplePayload, loadResult.getOrThrow())
+
+        // Cross-user read must fail with PERMISSION_DENIED
+        signInTestUser(BOB_EMAIL)
+        val bobRepo = VitaRepository(firestore)
+        val crossRead = withTimeout(DEFAULT_TIMEOUT_MS) {
+            bobRepo.loadPortalState(aliceUid)
+        }
+        assertTrue(crossRead.isFailure)
+        val firestoreEx = crossRead.exceptionOrNull()?.unwrapFirestoreException()
+        assertNotNull(firestoreEx)
+        assertEquals(FirebaseFirestoreException.Code.PERMISSION_DENIED, firestoreEx?.code)
+    }
+
     private companion object {
         const val ALICE_EMAIL = "alice@vitatakip.test"
         const val BOB_EMAIL = "bob@vitatakip.test"
@@ -116,3 +149,4 @@ class VitaRepositoryRuleTest : FirestoreEmulatorTestBase() {
         const val FLOW_TIMEOUT_MS = 3000L
     }
 }
+

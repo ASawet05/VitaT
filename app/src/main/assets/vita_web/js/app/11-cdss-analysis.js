@@ -160,6 +160,28 @@ function runCDSSAnalysis() {
         });
       }
 
+      if (typeof parseKidneyFunctionAndCompareMedications === "function") {
+        const kidneyMedSafety = parseKidneyFunctionAndCompareMedications(
+          { creatinine: creatinine, egfr: egfrResult ? egfrResult.egfr : null },
+          { triggerSource: "cdss_execute", renderUI: false }
+        );
+        if (kidneyMedSafety && Array.isArray(kidneyMedSafety.warnings)) {
+          kidneyMedSafety.warnings.forEach(w => {
+            if (w.severity === "critical" || w.severity === "warning") {
+              contraindications.push({
+                title: w.title,
+                detail: `${w.mechanism} ${w.recommendation}`
+              });
+            } else {
+              findings.push({
+                title: w.title,
+                detail: `${w.mechanism} ${w.recommendation}`
+              });
+            }
+          });
+        }
+      }
+
       if (hasBloodThinner) {
         contraindications.push({
           title: "⚠️ KAN SULANDIRICI (ANTİKOAGÜLAN) GÜVENLİK FİLTRESİ AKTİF",
@@ -456,6 +478,10 @@ function runCDSSAnalysis() {
           contraContainer.classList.add("hidden");
           contraContainer.innerHTML = "";
         }
+      }
+
+      if (typeof renderClinicalKidneySafetyWarningUI === "function") {
+        renderClinicalKidneySafetyWarningUI(state.lastKidneySafetyAnalysis || null);
       }
 
       const recallContainer = document.getElementById("cdssRecallContainer");

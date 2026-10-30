@@ -18,13 +18,99 @@ function openAppDrawer() {
       }
     }
 
+    function toggleHeaderProfileMenu(event) {
+      if (event && typeof event.stopPropagation === "function") {
+        event.stopPropagation();
+      }
+      const menu = document.getElementById("headerProfileDropdownMenu");
+      const btn = document.getElementById("headerProfileButton");
+      if (!menu) return;
+      const isHidden = menu.classList.contains("hidden");
+      if (isHidden) {
+        menu.classList.remove("hidden");
+        if (btn) btn.setAttribute("aria-expanded", "true");
+      } else {
+        menu.classList.add("hidden");
+        if (btn) btn.setAttribute("aria-expanded", "false");
+      }
+    }
+
+    function closeHeaderProfileMenu() {
+      const menu = document.getElementById("headerProfileDropdownMenu");
+      const btn = document.getElementById("headerProfileButton");
+      if (menu) menu.classList.add("hidden");
+      if (btn) btn.setAttribute("aria-expanded", "false");
+    }
+
+    document.addEventListener("click", function (evt) {
+      const wrapper = document.getElementById("headerProfileMenuWrapper");
+      if (wrapper && !wrapper.contains(evt.target)) {
+        closeHeaderProfileMenu();
+      }
+    });
+
+    document.addEventListener("keydown", function (evt) {
+      if (evt.key === "Escape") {
+        closeHeaderProfileMenu();
+      }
+    });
+
+    function renderSettingsView() {
+      const p = (typeof state !== "undefined" && state.user) ? state.user : defaultUserProfile;
+      const nameEl = document.getElementById("settingsProfileName");
+      const ageGenderEl = document.getElementById("settingsProfileAgeGender");
+      const bodyMetricsEl = document.getElementById("settingsProfileBodyMetrics");
+      const medsSummaryEl = document.getElementById("settingsProfileMedsSummary");
+      const dataSummaryEl = document.getElementById("settingsDataSummaryText");
+
+      if (nameEl) nameEl.textContent = p.name || "Kullanıcı";
+      if (ageGenderEl) {
+        const gLabel = p.gender === "E" ? "Erkek" : "Kadın";
+        ageGenderEl.textContent = `${p.age || 28} yaş • ${gLabel}`;
+      }
+      if (bodyMetricsEl) {
+        const h = p.height || 170;
+        const w = p.weight || 68;
+        const bmiInfo = typeof calculateBMI === "function" ? calculateBMI(w, h) : { bmi: "-" };
+        bodyMetricsEl.textContent = `${h} cm / ${w} kg (VKİ: ${bmiInfo.bmi})`;
+      }
+      if (medsSummaryEl) {
+        const chronicArr = Array.isArray(p.chronic) ? p.chronic : [];
+        const medsArr = Array.isArray(p.medications) ? p.medications : [];
+        const total = chronicArr.length + medsArr.length;
+        medsSummaryEl.textContent = total > 0
+          ? `${total} aktif kayıt (${[...medsArr, ...chronicArr].slice(0, 3).join(", ")})`
+          : "Kayıtlı ilaç yok";
+      }
+      if (dataSummaryEl && typeof state !== "undefined") {
+        const supCount = Array.isArray(state.supplements) ? state.supplements.length : 0;
+        const labCount = Array.isArray(state.labHistory) ? state.labHistory.length : 0;
+        const symCount = state.selectedSymptoms instanceof Set ? state.selectedSymptoms.size : 0;
+        dataSummaryEl.textContent = `${supCount} takviye • ${labCount} tahlil kaydı • ${symCount} belirti`;
+      }
+
+      if (typeof updateNotificationToggleUI === "function") {
+        updateNotificationToggleUI();
+      }
+      if (typeof updateApiKeyUI === "function") {
+        updateApiKeyUI();
+      }
+      if (typeof window.renderPwaNotificationSmartChecklist === "function") {
+        window.renderPwaNotificationSmartChecklist();
+      }
+      if (typeof refreshCloudSyncUI === "function") {
+        refreshCloudSyncUI();
+      }
+    }
+
     function navigateToView(viewId) {
       if (window.TTSVoice) TTSVoice.stop();
       if (window.SoundEffects) SoundEffects.playNavigate();
       closeAppDrawer();
+      closeHeaderProfileMenu();
       state.activeTab = viewId;
 
-      const allViews = ["view-home", "view-labs", "view-neyim", "view-clinical-results", "view-report"];
+      const allViews = ["view-home", "view-labs", "view-neyim", "view-clinical-results", "view-report", "view-settings"];
       allViews.forEach(v => {
         const el = document.getElementById(v);
         if (el) el.classList.add("hidden");
@@ -41,7 +127,11 @@ function openAppDrawer() {
       allViews.forEach(v => {
         const btn = document.getElementById(`drawer-nav-${v}`);
         if (btn) {
-          if (v === viewId) {
+          if (v === "view-settings") {
+            btn.className = v === viewId
+              ? "w-full flex items-center justify-between gap-3 px-3.5 py-3 rounded-xl bg-teal-600 text-white font-bold transition text-left cursor-pointer shadow-md"
+              : "w-full flex items-center justify-between gap-3 px-3.5 py-3 rounded-xl text-slate-200 hover:text-white hover:bg-navy-800 transition text-left cursor-pointer";
+          } else if (v === viewId) {
             btn.className = "w-full flex items-center gap-3 px-3.5 py-3 rounded-xl bg-teal-600 text-white font-bold transition text-left cursor-pointer shadow-md";
           } else {
             btn.className = "w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-slate-200 hover:text-white hover:bg-navy-800 transition text-left cursor-pointer";
@@ -64,7 +154,8 @@ function openAppDrawer() {
           "view-labs": "Laboratuvar Tahlillerim & e-Nabız PDF Arşivi",
           "view-neyim": "NeyimVar? Belirti değerlendirmesi",
           "view-clinical-results": "Klinik Karar Analizi Sonuçları",
-          "view-report": "Doktor Görüşmesi İçin Hasta Özeti"
+          "view-report": "Doktor Görüşmesi İçin Hasta Özeti",
+          "view-settings": "Ayarlar & Uygulama Yönetimi"
         };
         if (titleEl) titleEl.textContent = titles[viewId] || "Modül";
 
@@ -81,8 +172,13 @@ function openAppDrawer() {
         } else if (viewId === "view-clinical-results") {
           ensureCDSSResultsView();
           if (state.lastCDSS) renderCDSSResultsUI(true);
+          if (typeof renderClinicalKidneySafetyWarningUI === "function") {
+            renderClinicalKidneySafetyWarningUI(state.lastKidneySafetyAnalysis || null);
+          }
         } else if (viewId === "view-report") {
           renderReportTab();
+        } else if (viewId === "view-settings") {
+          renderSettingsView();
         }
       }
 
@@ -103,7 +199,7 @@ function openAppDrawer() {
       const resultsView = document.getElementById("view-clinical-results");
       if (container && resultsView && container.parentElement !== resultsView) resultsView.appendChild(container);
       if (container) {
-        ["lifeStageCard", "contraindicationAlertContainer", "cdssFindingsSection", "protocolRecommendationSection", "foodAlternativesSection", "cdssRecallContainer", "triageLabRecommendationsContainer", "specificityPredictionContainer"].forEach(id => {
+        ["lifeStageCard", "contraindicationAlertContainer", "cdssKidneySafetyWarningContainer", "cdssFindingsSection", "protocolRecommendationSection", "foodAlternativesSection", "cdssRecallContainer", "triageLabRecommendationsContainer", "specificityPredictionContainer"].forEach(id => {
           const section = document.getElementById(id);
           if (section && section.parentElement === container) container.appendChild(section);
         });
@@ -136,10 +232,10 @@ function openAppDrawer() {
         "tab-daily": "view-home",
         "tab-labs": "view-labs",
         "tab-neyim": "view-neyim",
-        "tab-report": "view-report"
+        "tab-report": "view-report",
+        "tab-settings": "view-settings"
       };
       navigateToView(map[tabId] || tabId);
     }
 
     /* GLOBAL ARAMA MOTORU */
-    

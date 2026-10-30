@@ -36,8 +36,10 @@ function renderDailyTab() {
       const taken = todaySupplements.filter(i => i.taken).length;
       const vitaScore = total > 0 ? Math.round((taken / total) * 70 + Math.min(1, state.hydration.current / state.hydration.target) * 30) : Math.round(Math.min(1, state.hydration.current / state.hydration.target) * 100);
 
-      document.getElementById("headerVitaSkor").textContent = `${vitaScore}%`;
-      document.getElementById("dashVitaSkor").textContent = `${vitaScore}%`;
+      const headerVitaEl = document.getElementById("headerVitaSkor");
+      if (headerVitaEl) headerVitaEl.textContent = `${vitaScore}%`;
+      const dashVitaEl = document.getElementById("dashVitaSkor");
+      if (dashVitaEl) dashVitaEl.textContent = `${vitaScore}%`;
 
       const checklistContainer = document.getElementById("supplementChecklistContainer");
       if (!checklistContainer) return;
@@ -981,12 +983,11 @@ function renderDailyTab() {
         window.VitaRechartsDashboard.renderAll();
       }
       const card = document.getElementById("biomarkerChartCard");
+      if (card) card.classList.remove("hidden");
       const canvas = document.getElementById("labTrendChart");
       const select = document.getElementById("labTrendMetricSelect");
       const rangeText = document.getElementById("labTrendRangeText");
       if (!card || !canvas) return;
-
-      card.classList.remove("hidden");
       if (!Array.isArray(state.labHistory) || state.labHistory.length < 2) {
         if (labTrendChartInstance) { labTrendChartInstance.destroy(); labTrendChartInstance = null; }
         if (rangeText) rangeText.textContent = "Tekil Chart.js grafiği için en az iki farklı tarihte kayıtlı tahlil gerekir; üstteki Recharts çoklu çizgi panelinden örnek veya kayıtlı trendleri inceleyebilirsiniz.";

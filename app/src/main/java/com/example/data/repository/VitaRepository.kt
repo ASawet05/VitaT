@@ -266,4 +266,66 @@ class VitaRepository(private val db: FirebaseFirestore) {
             Result.failure(e)
         }
     }
+
+    suspend fun savePortalState(
+        displayName: String,
+        email: String,
+        payloadJson: String
+    ): Result<Unit> {
+        val uid = requireUserId()
+        val safeName = displayName.trim().ifEmpty { "Kullanıcı" }.take(100)
+        val safeEmail = email.trim().ifEmpty { "user@vitatakip.local" }.take(120)
+        val safePayload = payloadJson.trim().ifEmpty { "{}" }.take(250000)
+        val docRef = db.collection("users").document(uid)
+            .collection("portal_state").document("main")
+        return try {
+            val existingSnap = docRef.get().await()
+            if (existingSnap.exists()) {
+                docRef.update(
+                    mapOf(
+                        "displayName" to safeName,
+                        "email" to safeEmail,
+                        "payloadJson" to safePayload,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } else {
+                docRef.set(
+                    mapOf(
+                        "userId" to uid,
+                        "displayName" to safeName,
+                        "email" to safeEmail,
+                        "payloadJson" to safePayload,
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.WRITE, docRef.path)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun loadPortalState(ownerUserId: String = requireUserId()): Result<String?> {
+        val docRef = db.collection("users").document(ownerUserId)
+            .collection("portal_state").document("main")
+        return try {
+            val snap = docRef.get().await()
+            if (snap.exists()) {
+                Result.success(snap.getString("payloadJson"))
+            } else {
+                Result.success(null)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.GET, docRef.path)
+            Result.failure(e)
+        }
+    }
 }
+

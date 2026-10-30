@@ -122,6 +122,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 import java.io.File
 
@@ -255,8 +257,11 @@ fun postVitaSystemNotification(context: Context, title: String, body: String): B
 
 private class AndroidVitaBridge(
     private val context: Context,
+    private val coroutineScope: CoroutineScope,
     private val webViewProvider: () -> WebView?,
     private val onOpenCloudSyncDialog: () -> Unit,
+    private val onStartDirectGoogleSignIn: () -> Unit,
+    private val onSignOutGoogle: () -> Unit,
     private val onRequestNotificationPermission: () -> Unit
 ) {
     @JavascriptInterface
@@ -285,6 +290,108 @@ private class AndroidVitaBridge(
         webView.post {
             onOpenCloudSyncDialog()
         }
+    }
+
+    @JavascriptInterface
+    fun startFirebaseGoogleSignIn() {
+        val webView = webViewProvider() ?: return
+        webView.post {
+            onStartDirectGoogleSignIn()
+        }
+    }
+
+    @JavascriptInterface
+    fun signOutFirebaseGoogle() {
+        val webView = webViewProvider() ?: return
+        webView.post {
+            onSignOutGoogle()
+        }
+    }
+
+    @JavascriptInterface
+    fun getGoogleCloudAccountInfo(): String {
+        return runCatching {
+            val user = Firebase.auth.currentUser
+            val prefs = context.getSharedPreferences("vitatakip_cloud_sync_prefs", Context.MODE_PRIVATE)
+            if (user != null) {
+                val uid = user.uid.replace("\"", "")
+                val email = (user.email ?: prefs.getString("linked_email", "") ?: "").replace("\"", "")
+                val name = (user.displayName ?: prefs.getString("linked_name", "") ?: "Google Kullanıcısı").replace("\"", "")
+                val lastSync = prefs.getString("last_sync_${email.lowercase()}", prefs.getString("last_sync_default", "")) ?: ""
+                """{"connected":true,"uid":"$uid","email":"$email","displayName":"$name","lastSync":"$lastSync","source":"firebase"}"""
+            } else {
+                val savedEmail = (prefs.getString("linked_email", "") ?: "").replace("\"", "")
+                val savedName = (prefs.getString("linked_name", "") ?: "").replace("\"", "")
+                val lastSync = prefs.getString("last_sync_${savedEmail.lowercase()}", prefs.getString("last_sync_default", "")) ?: ""
+                if (savedEmail.isNotBlank()) {
+                    """{"connected":true,"uid":"local_google_${savedEmail.hashCode()}","email":"$savedEmail","displayName":"$savedName","lastSync":"$lastSync","source":"linked"}"""
+                } else {
+                    """{"connected":false,"uid":"","email":"","displayName":"","lastSync":"","source":"none"}"""
+                }
+            }
+        }.getOrDefault("""{"connected":false,"uid":"","email":"","displayName":"","lastSync":"","source":"none"}""")
+    }
+
+    @JavascriptInterface
+    fun saveGoogleCloudAccountLink(email: String?, displayName: String?): Boolean {
+        return runCatching {
+            val cleanEmail = (email ?: "").trim()
+            val cleanName = (displayName ?: "").trim()
+            val prefs = context.getSharedPreferences("vitatakip_cloud_sync_prefs", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("linked_email", cleanEmail)
+                .putString("linked_name", cleanName)
+                .apply()
+            true
+        }.getOrDefault(false)
+    }
+
+    @JavascriptInterface
+    fun saveCloudBackupJson(accountKey: String?, backupJson: String?): Boolean {
+        if (backupJson.isNullOrBlank()) return false
+        return runCatching {
+            val user = Firebase.auth.currentUser
+            val key = (accountKey?.takeIf { it.isNotBlank() } ?: user?.email ?: user?.uid ?: "default")
+                .trim()
+                .lowercase()
+            val nowIso = java.text.SimpleDateFormat("dd.MM.yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+            val prefs = context.getSharedPreferences("vitatakip_cloud_sync_prefs", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("backup_payload_$key", backupJson)
+                .putString("backup_payload_default", backupJson)
+                .putString("last_sync_$key", nowIso)
+                .putString("last_sync_default", nowIso)
+                .apply()
+
+            if (user != null) {
+                val safeName = user.displayName ?: prefs.getString("linked_name", "") ?: "Google Kullanıcısı"
+                val safeEmail = user.email ?: key
+                coroutineScope.launch {
+                    runCatching {
+                        VitaRepository(context.applicationContext).savePortalState(
+                            displayName = safeName,
+                            email = safeEmail,
+                            payloadJson = backupJson
+                        )
+                    }
+                }
+            }
+            true
+        }.getOrDefault(false)
+    }
+
+    @JavascriptInterface
+    fun loadCloudBackupJson(accountKey: String?): String {
+        return runCatching {
+            val user = Firebase.auth.currentUser
+            val key = (accountKey?.takeIf { it.isNotBlank() } ?: user?.email ?: user?.uid ?: "default")
+                .trim()
+                .lowercase()
+            val prefs = context.getSharedPreferences("vitatakip_cloud_sync_prefs", Context.MODE_PRIVATE)
+            prefs.getString("backup_payload_$key", null)
+                ?: prefs.getString("backup_payload_default", "")
+                ?: ""
+        }.getOrDefault("")
     }
 
     @JavascriptInterface
@@ -478,8 +585,90 @@ fun VitaTakipWebPortalScreen(
                     addJavascriptInterface(
                         AndroidVitaBridge(
                             context = ctx,
+                            coroutineScope = scope,
                             webViewProvider = { webViewRef },
                             onOpenCloudSyncDialog = { showCloudSyncDialog = true },
+                            onStartDirectGoogleSignIn = {
+                                val existingUser = Firebase.auth.currentUser
+                                if (existingUser != null) {
+                                    scope.launch {
+                                        val remotePayload = VitaRepository(ctx.applicationContext)
+                                            .loadPortalState(existingUser.uid)
+                                            .getOrNull()
+                                        if (!remotePayload.isNullOrBlank()) {
+                                            val emailKey = (existingUser.email ?: existingUser.uid).trim().lowercase()
+                                            ctx.getSharedPreferences("vitatakip_cloud_sync_prefs", Context.MODE_PRIVATE)
+                                                .edit()
+                                                .putString("backup_payload_$emailKey", remotePayload)
+                                                .putString("backup_payload_default", remotePayload)
+                                                .apply()
+                                        }
+                                        val safeUid = existingUser.uid.replace("'", "\\'")
+                                        val safeEmail = (existingUser.email ?: "").replace("'", "\\'")
+                                        val safeName = (existingUser.displayName ?: existingUser.email?.substringBefore("@") ?: "Google Kullanıcısı").replace("'", "\\'")
+                                        webViewRef?.evaluateJavascript(
+                                            "if (window.onNativeGoogleAccountLinked) { window.onNativeGoogleAccountLinked('$safeUid', '$safeEmail', '$safeName', true); }",
+                                            null
+                                        )
+                                    }
+                                } else {
+                                    authError = null
+                                    isSigningIn = true
+                                    onGoogleSignInClicked(
+                                        context = context,
+                                        credentialManager = credentialManager,
+                                        onAuthSuccess = {
+                                            isSigningIn = false
+                                            showCloudSyncDialog = false
+                                            val signedUser = Firebase.auth.currentUser
+                                            if (signedUser != null) {
+                                                scope.launch {
+                                                    val remotePayload = VitaRepository(ctx.applicationContext)
+                                                        .loadPortalState(signedUser.uid)
+                                                        .getOrNull()
+                                                    if (!remotePayload.isNullOrBlank()) {
+                                                        val emailKey = (signedUser.email ?: signedUser.uid).trim().lowercase()
+                                                        ctx.getSharedPreferences("vitatakip_cloud_sync_prefs", Context.MODE_PRIVATE)
+                                                            .edit()
+                                                            .putString("backup_payload_$emailKey", remotePayload)
+                                                            .putString("backup_payload_default", remotePayload)
+                                                            .apply()
+                                                    }
+                                                    val safeUid = signedUser.uid.replace("'", "\\'")
+                                                    val safeEmail = (signedUser.email ?: "").replace("'", "\\'")
+                                                    val safeName = (signedUser.displayName ?: signedUser.email?.substringBefore("@") ?: "Google Kullanıcısı").replace("'", "\\'")
+                                                    webViewRef?.evaluateJavascript(
+                                                        "if (window.onNativeGoogleAccountLinked) { window.onNativeGoogleAccountLinked('$safeUid', '$safeEmail', '$safeName', true); }",
+                                                        null
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        onAuthError = { msg ->
+                                            isSigningIn = false
+                                            authError = msg
+                                            showCloudSyncDialog = true
+                                        },
+                                        scope = scope,
+                                        onAuthCancelled = {
+                                            isSigningIn = false
+                                            showCloudSyncDialog = true
+                                        }
+                                    )
+                                }
+                            },
+                            onSignOutGoogle = {
+                                signOutUser(
+                                    credentialManager = credentialManager,
+                                    onSignOutComplete = {
+                                        webViewRef?.evaluateJavascript(
+                                            "if (window.onNativeGoogleAccountDisconnected) { window.onNativeGoogleAccountDisconnected(); }",
+                                            null
+                                        )
+                                    },
+                                    scope = scope
+                                )
+                            },
                             onRequestNotificationPermission = {
                                 ensureVitaNotificationChannel(ctx)
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -584,7 +773,7 @@ fun VitaTakipWebPortalScreen(
                         }
                     }
 
-                    loadUrl("file:///android_asset/vita_web/index.html")
+                    loadUrl("file:///android_asset/vita_web/index.html?v=18")
                 }
             },
             update = { webView ->
@@ -601,6 +790,30 @@ fun VitaTakipWebPortalScreen(
         )
     }
 
+    LaunchedEffect(currentUser, webViewRef) {
+        val wv = webViewRef ?: return@LaunchedEffect
+        if (currentUser != null) {
+            val remotePayload = VitaRepository(context.applicationContext)
+                .loadPortalState(currentUser.uid)
+                .getOrNull()
+            if (!remotePayload.isNullOrBlank()) {
+                val emailKey = (currentUser.email ?: currentUser.uid).trim().lowercase()
+                context.getSharedPreferences("vitatakip_cloud_sync_prefs", Context.MODE_PRIVATE)
+                    .edit()
+                    .putString("backup_payload_$emailKey", remotePayload)
+                    .putString("backup_payload_default", remotePayload)
+                    .apply()
+            }
+            val safeUid = (currentUser.uid).replace("'", "\\'")
+            val safeEmail = (currentUser.email ?: "").replace("'", "\\'")
+            val safeName = (currentUser.displayName ?: currentUser.email?.substringBefore("@") ?: "Google Kullanıcısı").replace("'", "\\'")
+            wv.evaluateJavascript(
+                "if (window.onNativeGoogleAccountLinked) { window.onNativeGoogleAccountLinked('$safeUid', '$safeEmail', '$safeName', false); }",
+                null
+            )
+        }
+    }
+
     if (showCloudSyncDialog) {
         AlertDialog(
             onDismissRequest = { showCloudSyncDialog = false },
@@ -612,7 +825,7 @@ fun VitaTakipWebPortalScreen(
             },
             title = {
                 Text(
-                    text = if (currentUser != null) "Google Bulut Hesabı Bağlı" else "İsteğe Bağlı Google Girişi",
+                    text = if (currentUser != null) "Google Bulut Hesabı Bağlı" else "Google Hesabı Bağla & Bulut Eşitleme",
                     fontWeight = FontWeight.Bold
                 )
             },
@@ -623,11 +836,11 @@ fun VitaTakipWebPortalScreen(
                             text = "Aktif Google Hesabı: ${currentUser.email ?: currentUser.displayName ?: "Kullanıcı"}"
                         )
                         Text(
-                            text = "Uygulamayı Google hesabınızla veya yerel profilinizle kullanmaya devam edebilirsiniz."
+                            text = "Bu Google hesabıyla VitaTakip Portalına tek tıkla giriş yapabilir, verilerinizi buluta yedekleyebilir veya Bulut Paneline geçebilirsiniz."
                         )
                     } else {
                         Text(
-                            text = "VitaTakip Pro'yu Google hesabı olmadan doğrudan kullanabilirsiniz. İsterseniz Google hesabınızla bağlanarak bulut panelini de açabilirsiniz."
+                            text = "VitaTakip Pro'yu Google hesabı olmadan yerel olarak kullanabilirsiniz. İsterseniz Google hesabınızı bağlayarak profil, tahlil ve takviye verilerinizi bulutla eşitleyebilirsiniz."
                         )
                         if (authError != null) {
                             Text(
@@ -643,11 +856,17 @@ fun VitaTakipWebPortalScreen(
                 if (currentUser != null) {
                     Button(
                         onClick = {
+                            val safeUid = (currentUser.uid).replace("'", "\\'")
+                            val safeEmail = (currentUser.email ?: "").replace("'", "\\'")
+                            val safeName = (currentUser.displayName ?: currentUser.email?.substringBefore("@") ?: "Google Kullanıcısı").replace("'", "\\'")
+                            webViewRef?.evaluateJavascript(
+                                "if (window.onNativeGoogleAccountLinked) { window.onNativeGoogleAccountLinked('$safeUid', '$safeEmail', '$safeName', true); }",
+                                null
+                            )
                             showCloudSyncDialog = false
-                            onOpenCloudNativePanel()
                         }
                     ) {
-                        Text("Bulut Paneline Geç")
+                        Text("Portalda Eşitle & Devam Et")
                     }
                 } else {
                     Button(
@@ -660,6 +879,16 @@ fun VitaTakipWebPortalScreen(
                                 onAuthSuccess = {
                                     isSigningIn = false
                                     showCloudSyncDialog = false
+                                    val signedUser = Firebase.auth.currentUser
+                                    if (signedUser != null) {
+                                        val safeUid = (signedUser.uid).replace("'", "\\'")
+                                        val safeEmail = (signedUser.email ?: "").replace("'", "\\'")
+                                        val safeName = (signedUser.displayName ?: signedUser.email?.substringBefore("@") ?: "Google Kullanıcısı").replace("'", "\\'")
+                                        webViewRef?.evaluateJavascript(
+                                            "if (window.onNativeGoogleAccountLinked) { window.onNativeGoogleAccountLinked('$safeUid', '$safeEmail', '$safeName', true); }",
+                                            null
+                                        )
+                                    }
                                 },
                                 onAuthError = { msg ->
                                     isSigningIn = false
@@ -688,7 +917,7 @@ fun VitaTakipWebPortalScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                         }
-                        Text("Google ile Giriş Yap")
+                        Text("Google ile Giriş Yap & Bağla")
                     }
                 }
             },
@@ -697,9 +926,21 @@ fun VitaTakipWebPortalScreen(
                     if (currentUser != null) {
                         OutlinedButton(
                             onClick = {
+                                showCloudSyncDialog = false
+                                onOpenCloudNativePanel()
+                            }
+                        ) {
+                            Text("Bulut Paneli")
+                        }
+                        OutlinedButton(
+                            onClick = {
                                 signOutUser(
                                     credentialManager = credentialManager,
                                     onSignOutComplete = {
+                                        webViewRef?.evaluateJavascript(
+                                            "if (window.onNativeGoogleAccountDisconnected) { window.onNativeGoogleAccountDisconnected(); }",
+                                            null
+                                        )
                                         showCloudSyncDialog = false
                                     },
                                     scope = scope
