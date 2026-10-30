@@ -253,17 +253,50 @@ class ExampleRobolectricTest {
         assertTrue(reportJs.contains("setDoctorReportMode"))
         assertTrue(reportJs.contains("getDoctorReportMode"))
 
-        // Verify Google Hesabı Bağla & Bulut Eşitleme button in #authModal, Header, Settings, and #cloudSyncModal
+        // Verify Google Hesabı Bağla & Bulut Eşitleme button in #authModal, Header, Profile Menu Status Bar, Settings, and #cloudSyncModal
         assertTrue(indexHtml.contains("id=\"authGoogleCloudSyncBtn\""))
         assertTrue(indexHtml.contains("id=\"headerCloudSyncBtn\""))
+        assertTrue(indexHtml.contains("id=\"profileMenuCloudStatusCard\""))
+        assertTrue(indexHtml.contains("id=\"profileMenuCloudBarFill\""))
+        assertTrue(indexHtml.contains("id=\"profileMenuCloudPill\""))
         assertTrue(indexHtml.contains("id=\"cloudSyncModal\""))
         assertTrue(indexHtml.contains("id=\"settingsCloudSyncStatusBadge\""))
         val stateJs = context.assets.open("vita_web/js/app/06-state-lab-reference.js").bufferedReader().use { it.readText() }
         assertTrue(stateJs.contains("openCloudSyncModal"))
         assertTrue(stateJs.contains("syncDataToCloudNow"))
         assertTrue(stateJs.contains("restoreDataFromCloudNow"))
+
+        // Verify Task 1: Dual-mode Barcode & AI Recognition (Supplement vs Medication) & Turkish EAN-13 DB
+        assertTrue(indexHtml.contains("id=\"btnHomeScanSupplementBarcode\""))
+        assertTrue(indexHtml.contains("id=\"btnOpenMedicationScannerModal\""))
+        assertTrue(indexHtml.contains("id=\"barcodeTrDatabaseQuickSelect\""))
+        assertTrue(indexHtml.contains("id=\"barcodeMedicationInspectPanel\""))
+        assertTrue(indexHtml.contains("id=\"barcodeCategoryFilterAlert\""))
+        val barcodeJs = context.assets.open("vita_web/js/app/13-ai-summary-barcode.js").bufferedReader().use { it.readText() }
+        assertTrue(barcodeJs.contains("VITA_TR_PRODUCT_BARCODE_DB"))
+        assertTrue(barcodeJs.contains("switchBarcodeScannerMode"))
+        assertTrue(barcodeJs.contains("transferScannedMedicationToInspector"))
+        assertTrue(barcodeJs.contains("classifyScannedProductCategory"))
+
+        // Verify Task 2: NeyimVar [Anamnez Triyaj ve eGFR Analiz] button, inline inputs, and inline result container
+        assertTrue(indexHtml.contains("id=\"btnRunCDSS\""))
+        assertTrue(indexHtml.contains("Anamnez Triyaj ve eGFR Analiz"))
+        assertTrue(indexHtml.contains("id=\"neyimInputAge\""))
+        assertTrue(indexHtml.contains("id=\"neyimInputGender\""))
+        assertTrue(indexHtml.contains("id=\"neyimInputCreatinine\""))
+        assertTrue(indexHtml.contains("id=\"neyimTriageEgfrResultContainer\""))
+        assertTrue(indexHtml.contains("id=\"neyimTriageErrorBanner\""))
+        val cdssJs = context.assets.open("vita_web/js/app/11-cdss-analysis.js").bufferedReader().use { it.readText() }
+        assertTrue(cdssJs.contains("evaluateAnamnesisTriageAndEgfr"))
+        assertTrue(cdssJs.contains("renderNeyimInlineTriageResult"))
+
+        // Verify Task 3: Cloud Sync & Google Integration CSS z-index and overflow-wrap rules
+        val styleCss = context.assets.open("vita_web/css/style.css").bufferedReader().use { it.readText() }
+        assertTrue(styleCss.contains("vita-cloud-sync-modal"))
+        assertTrue(styleCss.contains("overflow-wrap: anywhere"))
     }
 }
+
 
 
 

@@ -773,7 +773,7 @@ fun VitaTakipWebPortalScreen(
                         }
                     }
 
-                    loadUrl("file:///android_asset/vita_web/index.html?v=18")
+                    loadUrl("file:///android_asset/vita_web/index.html?v=21")
                 }
             },
             update = { webView ->

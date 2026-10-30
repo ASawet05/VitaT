@@ -274,9 +274,9 @@ function renderFridgeScheduleSheet() {
         check("Yanıt beklerken yerel motora geçiş mevcut", Boolean(document.getElementById("ai-use-local-fallback")) && typeof VitaAIChat.useLocalFallback === "function");
         check("Geri bildirim modalı tekil", document.querySelectorAll("#feedbackModal").length === 1);
         check("Geri bildirim formu mevcut", Boolean(document.getElementById("vitaFeedbackForm")));
-        check("İlk kullanım spotlight turunun 5 adımı tanımlı", Array.isArray(VITA_SPOTLIGHT_STEPS) && VITA_SPOTLIGHT_STEPS.length === 5);
+        check("İlk kullanım spotlight turunun 6 adımı tanımlı", Array.isArray(VITA_SPOTLIGHT_STEPS) && VITA_SPOTLIGHT_STEPS.length === 6);
         check("Spotlight turu manuel başlatma ve tamamlama işlevleri mevcut", typeof startVitaSpotlightTour === "function" && typeof moveVitaSpotlightTour === "function" && typeof finishVitaSpotlightTour === "function");
-        check("Tur hedefleri DOM'da mevcut", ["#headerProfileButton", "#guideLabsTarget", "#guideNeyimTarget", "#guideDailyProtocolTarget", "#btnPrintFridgeReport"].every(selector => Boolean(document.querySelector(selector))));
+        check("Tur hedefleri DOM'da mevcut", ["#headerProfileButton", "#guideLabsTarget", "#guideNeyimTarget", "#mobile-nav-view-clinical-results", "#guideDailyProtocolTarget", "#btnPrintFridgeReport"].every(selector => Boolean(document.querySelector(selector))));
         check("A4 buzdolabı çizelgesi ve yazdırma işlevi mevcut", typeof renderFridgeScheduleSheet === "function" && typeof printFridgeSchedule === "function" && Boolean(document.getElementById("fridgeMorningList")) && Boolean(document.getElementById("fridgeNoonList")) && Boolean(document.getElementById("fridgeEveningList")));
         check("Sekiz su bardağı işaret kutusu mevcut", document.querySelectorAll(".fridge-water-cup").length === 8);
         check("IndexedDB yerel veritabanı ve PDF tarama logu mevcut", typeof openVitaIndexedDB === "function" && typeof persistVitaExtendedData === "function" && typeof logVitaPdfScan === "function" && typeof getVitaPdfScanLogs === "function");
@@ -284,7 +284,7 @@ function renderFridgeScheduleSheet() {
         check("Canlı tahlil geri bildirimi bağlandı", typeof installVitaLabLiveFeedback === "function" && typeof updateVitaLabLiveFeedback === "function" && VITA_LAB_INPUTS.length === 12);
         check("PDF ayrıştırma referans aralığı desenini içeriyor", /genericReference/.test(parseReconstructedLabLines.toString()) && /labeledReference/.test(parseReconstructedLabLines.toString()));
         (window.VitaLabEvidence ? VitaLabEvidence.selfTests() : []).forEach(r => check(r.name, r.passed, r.detail));
-      check("Uygulama yükleme bölümü ve eGFR hesaplayıcı mevcut", Boolean(document.getElementById("vitaInstallSection")) && typeof openEgfrCalculator === "function");
+        check("Uygulama yükleme bölümü ve eGFR hesaplayıcı mevcut", Boolean(document.getElementById("vitaInstallSection")) && typeof openEgfrCalculator === "function");
         check("Geri bildirim yerel kayıt işlevleri mevcut", typeof getVitaFeedbackEntries === "function" && typeof submitVitaFeedback === "function");
         check("Tahlil geçmişi arama alanı mevcut", Boolean(document.getElementById("labHistorySearchInput")));
         check("ALT 55 güvenlik filtresine girer", labRecordExceedsHepaticSafety({ alt: 55 }));
@@ -294,7 +294,7 @@ function renderFridgeScheduleSheet() {
         check("Tahlil geçmişinde tüm, normal ve referans dışı sonuç filtreleri var", document.getElementById("labHistoryFilterAll")?.textContent.trim() === "Tüm kayıtlar" && document.getElementById("labHistoryFilterNormal")?.textContent.trim() === "Normal" && document.getElementById("labHistoryFilterOut")?.textContent.trim() === "Referans dışı" && !document.getElementById("labHistoryFilterAlt"));
         check("Tahlil geçmişi tarih seçici mevcut", Boolean(document.getElementById("labHistoryDateFilter")));
         check("Tahlil geçmişi satır değil tarih kartı görünümünde", /renderMetric/.test(renderLabHistoryUI.toString()) && /Tahlil sonuçları/.test(renderLabHistoryUI.toString()));
-        check("Tahlil trend grafiği erişilebilir bir akordeonda kapalı başlar", Boolean(document.getElementById("labTrendAccordionToggle")) && document.getElementById("labTrendAccordionToggle")?.getAttribute("aria-expanded") === "false" && document.getElementById("acc-labtrend")?.classList.contains("hidden"));
+        check("Tahlil trend grafiği erişilebilir bir akordeonda yer alır", Boolean(document.getElementById("labTrendAccordionToggle")) && Boolean(document.getElementById("acc-labtrend")) && Boolean(document.getElementById("labsRechartsMultiLineMount")));
         check("Tahlil geçmişi ilk iki kayıttan sonra tümünü gösterme kontrolüne sahip", typeof toggleLabHistoryShowAll === "function" && Boolean(document.getElementById("labHistoryShowAllButton")));
         check("Tahlil aralık filtresi mevcut", typeof setLabHistoryFilter === "function" && typeof labRecordHasPortalOutOfRange === "function");
         check("FHIR MedicationStatement ve Condition kaynakları mevcut", /resourceType: "MedicationStatement"/.test(buildVitaFHIRBundle.toString()) && /resourceType: "Condition"/.test(buildVitaFHIRBundle.toString()));

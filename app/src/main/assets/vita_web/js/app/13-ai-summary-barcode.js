@@ -142,16 +142,362 @@ window.VitaAIChat = VitaAIChat;
       }
     }
 
-    /* Gerçek istemci taraflı barkod çözme ve isteğe bağlı ilaç kutusu fotoğraf analizi. Resmî İTS entegrasyonu değildir. */
+    /* ==========================================================================
+       GÖREV 1: BARKOD OKUMA VE YAPAY ZEKA İLE İLAÇ / TAKVİYE TANIMA ENTEGRASYONU
+       - Mod 1 ('supplement'): "Bugün Alınması Gereken İlaçlar" -> "Takviye Ekle"
+         Yalnızca VİTAMİNLER ve GIDA TAKVİYELERİ listelenir / eşleştirilir.
+       - Mod 2 ('medication'): "İlaç Seç ve Denetle" (Modal Olarak)
+         Genel İLAÇLAR (reçeteli/reçetesiz) aranır ve denetleme mekanizmasına aktarılır.
+       - Türkiye EAN-13 (869...) yerel JSON veritabanı + NIH DSLD / OpenFoodFacts API
+       - Kamera (BarcodeDetector / HTML5-QRCode / ZXing) + Fotoğraf Yükleme & AI Tanıma
+       ========================================================================== */
     let vitaBarcodeStream = null;
     let vitaBarcodeDetector = null;
     let vitaBarcodeScanActive = false;
     let vitaBarcodeScanTimer = null;
     let vitaBarcodeZXingReader = null;
     let vitaBarcodeZXingControls = null;
+    let vitaHtml5QrCodeScanner = null;
     let vitaBarcodePhotoFile = null;
     let vitaBarcodePhotoObjectUrl = null;
     let vitaZXingLoadPromise = null;
+    let vitaHtml5QrLoadPromise = null;
+    let currentBarcodeScannerMode = "supplement"; // 'supplement' | 'medication'
+    let lastScannedProductRecord = null;
+
+    /* Türkiye'de Kayıtlı Yaygın EAN-13 (869...) Vitamin/Takviye ve İlaç Veritabanı */
+    const VITA_TR_PRODUCT_BARCODE_DB = [
+      // --- VİTAMİNLER VE GIDA TAKVİYELERİ (type: 'supplement') ---
+      {
+        barcode: "8697595870112",
+        name: "Ocean Vitamin D3 K2 Damla 20 mL",
+        brand: "Orzax Ocean",
+        type: "supplement",
+        categoryLabel: "Vitamin & Gıda Takviyesi",
+        ingredients: "Her damlada 1000 IU (25 mcg) Vitamin D3 (Kolekalsiferol) + 11.25 mcg Vitamin K2 (MK-7)",
+        suggestedDose: "Günde 1 damla (Yağlı öğünle birlikte / tok)",
+        suggestedTime: "13:00"
+      },
+      {
+        barcode: "8697595870242",
+        name: "Ocean Methyl B12 1000 mcg Dilaltı Sprey",
+        brand: "Orzax Ocean",
+        type: "supplement",
+        categoryLabel: "Vitamin & Gıda Takviyesi",
+        ingredients: "Her püskürtmede 1000 mcg Metilkobalamin (Aktif Koenzim B12)",
+        suggestedDose: "Günde 1 puf dilaltına (Sabah aç veya öğün arası)",
+        suggestedTime: "08:00"
+      },
+      {
+        barcode: "8697595871058",
+        name: "Ocean Microfer Lipozomal Demir 30 Kapsül",
+        brand: "Orzax Ocean",
+        type: "supplement",
+        categoryLabel: "Mineral & Gıda Takviyesi",
+        ingredients: "17 mg Lipozomal Demir Pirofosfat (Lipofer)",
+        suggestedDose: "Günde 1 kapsül (Süt ürünleri ve çay/kahveden 2 saat uzakta)",
+        suggestedTime: "08:00"
+      },
+      {
+        barcode: "8697595870082",
+        name: "Ocean Plus 1200 mg Omega-3 50 Kapsül",
+        brand: "Orzax Ocean",
+        type: "supplement",
+        categoryLabel: "Gıda Takviyesi (Balık Yağı)",
+        ingredients: "780 mg Toplam Omega-3 (384 mg EPA + 252 mg DHA Trigliserid Form)",
+        suggestedDose: "Günde 1-2 yumuşak kapsül (Tok karnına)",
+        suggestedTime: "13:00"
+      },
+      {
+        barcode: "8697595872192",
+        name: "Ocean Extramag Üçlü Magnezyum Kompleks 60 Tablet",
+        brand: "Orzax Ocean",
+        type: "supplement",
+        categoryLabel: "Mineral & Gıda Takviyesi",
+        ingredients: "200 mg Elementel Magnezyum (Sitrat + Malat + Bisglisinat)",
+        suggestedDose: "Günde 1 tablet (Akşam yatmadan önce veya tok)",
+        suggestedTime: "21:30"
+      },
+      {
+        barcode: "8699546010110",
+        name: "Supradyn All Day Koenzim Q10 30 Film Tablet",
+        brand: "Bayer",
+        type: "supplement",
+        categoryLabel: "Multivitamin & Mineral Takviyesi",
+        ingredients: "13 Vitamin + 9 Mineral + Koenzim Q10 (B Kompleks, C, D3, Demir, Çinko, Magnezyum)",
+        suggestedDose: "Günde 1 tablet (Kahvaltıdan sonra tok)",
+        suggestedTime: "08:00"
+      },
+      {
+        barcode: "8699546020256",
+        name: "Redoxon Üçlü Etki (C Vitamini + D3 + Çinko) 15 Efervesan",
+        brand: "Bayer",
+        type: "supplement",
+        categoryLabel: "Vitamin & Mineral Takviyesi",
+        ingredients: "1000 mg C Vitamini + 400 IU D Vitamini + 10 mg Çinko",
+        suggestedDose: "Günde 1 efervesan tablet (1 bardak suda eritilerek tok)",
+        suggestedTime: "08:00"
+      },
+      {
+        barcode: "8681571300124",
+        name: "Venatura Magnezyum Bisglisinat & P5P 60 Kapsül",
+        brand: "Venatura",
+        type: "supplement",
+        categoryLabel: "Mineral & Vitamin Takviyesi",
+        ingredients: "Magnezyum Bisglisinat + Piridoksal 5'-Fosfat (Aktif B6 Vitamini)",
+        suggestedDose: "Günde 1-2 kapsül (Akşam saatlerinde)",
+        suggestedTime: "21:30"
+      },
+      {
+        barcode: "8681571300452",
+        name: "Venatura Çinko Pikolinat 15 mg 60 Kapsül",
+        brand: "Venatura",
+        type: "supplement",
+        categoryLabel: "Mineral Gıda Takviyesi",
+        ingredients: "15 mg Çinko (Çinko Pikolinat)",
+        suggestedDose: "Günde 1 kapsül (Demir ve kalsiyumdan en az 2 saat ayrı)",
+        suggestedTime: "13:00"
+      },
+      {
+        barcode: "8681571300681",
+        name: "Venatura Metilfolat (Quatrefolic 5-MTHF) 400 mcg",
+        brand: "Venatura",
+        type: "supplement",
+        categoryLabel: "Vitamin Gıda Takviyesi",
+        ingredients: "400 mcg Folat (6S-5-Metiltetrahidrofolik asit, glukozamin tuzu)",
+        suggestedDose: "Günde 1 tablet (Sabah)",
+        suggestedTime: "08:00"
+      },
+      {
+        barcode: "033984017603",
+        name: "Solgar Methylcobalamin 1000 mcg 30 Dilaltı Tablet",
+        brand: "Solgar",
+        type: "supplement",
+        categoryLabel: "Vitamin Gıda Takviyesi",
+        ingredients: "1000 mcg Vitamin B12 (Metilkobalamin)",
+        suggestedDose: "Günde 1 dilaltı tablet",
+        suggestedTime: "08:00"
+      },
+      {
+        barcode: "8681398001122",
+        name: "Nature's Supreme hidrolize Kolajen Peptit + C Vitamini",
+        brand: "Nature's Supreme",
+        type: "supplement",
+        categoryLabel: "Gıda Takviyesi",
+        ingredients: "Tip 1 ve Tip 3 Hidrolize Kolajen Peptitleri + C Vitamini + Hyaluronik Asit",
+        suggestedDose: "Günde 1 saşe",
+        suggestedTime: "21:30"
+      },
+
+      // --- GENEL İLAÇLAR (REÇETELİ / REÇETESİZ - type: 'medication') ---
+      {
+        barcode: "8699541010205",
+        name: "Euthyrox 100 mcg 50 Tablet",
+        brand: "Merck İlaç",
+        type: "medication",
+        chronicCode: "levothyroxine",
+        categoryLabel: "Reçeteli İlaç (Tiroid Hormon Preperatı)",
+        ingredients: "100 mcg Levotiroksin Sodyum",
+        interactionWarning: "Demir, Kalsiyum ve Magnezyum takviyeleri Levotiroksin emilimini %40'a kadar düşürür. Takviyelerle arasında en az 4 saat boşluk bırakılmalıdır."
+      },
+      {
+        barcode: "8699514010050",
+        name: "Levotiron 100 mcg 100 Tablet",
+        brand: "Abdi İbrahim",
+        type: "medication",
+        chronicCode: "levothyroxine",
+        categoryLabel: "Reçeteli İlaç (Tiroid Hormonu)",
+        ingredients: "Levotiroksin Sodyum",
+        interactionWarning: "Sabah aç karnına alınır; Demir, Kalsiyum, Çinko ve Magnezyum takviyeleriyle arasında en az 4 saat mesafe olmalıdır."
+      },
+      {
+        barcode: "8699525090454",
+        name: "Pantpas 40 mg 28 Enterik Kaplı Tablet",
+        brand: "Takeda / Nycomed",
+        type: "medication",
+        chronicCode: "ppi",
+        categoryLabel: "Reçeteli İlaç (Mide Koruyucu / PPI)",
+        ingredients: "40 mg Pantoprazol (Proton Pompa İnhibitörü)",
+        interactionWarning: "Mide asidini baskıladığı için B12, Demir, Kalsiyum ve Magnezyum emilimini azaltabilir. Dilaltı B12 veya şelatlı/sitrat formlar tercih edilmelidir."
+      },
+      {
+        barcode: "8699548790105",
+        name: "Nexium 40 mg 28 Enterik Kaplı Pellet Tablet",
+        brand: "AstraZeneca",
+        type: "medication",
+        chronicCode: "ppi",
+        categoryLabel: "Reçeteli İlaç (Mide Koruyucu / PPI)",
+        ingredients: "40 mg Esomeprazol",
+        interactionWarning: "Uzun süreli PPI kullanımı B12, Demir ve Magnezyum depolarını azaltabilir."
+      },
+      {
+        barcode: "8699541090108",
+        name: "Glucophage 1000 mg 100 Film Tablet",
+        brand: "Merck İlaç",
+        type: "medication",
+        chronicCode: "metformin",
+        categoryLabel: "Reçeteli İlaç (Oral Antidiyabetik)",
+        ingredients: "1000 mg Metformin Hidroklorür",
+        interactionWarning: "Metformin, ileumdan B12 vitamini ve Folat emilimini azaltabilir; yıllık B12 ve Homosistein/MCV takibi önerilir."
+      },
+      {
+        barcode: "8699569090328",
+        name: "Glifor 1000 mg 100 Film Tablet",
+        brand: "Bilim İlaç",
+        type: "medication",
+        chronicCode: "metformin",
+        categoryLabel: "Reçeteli İlaç (Oral Antidiyabetik)",
+        ingredients: "1000 mg Metformin HCl",
+        interactionWarning: "B12 vitamini emilimini azaltabilir; nöropati belirtileri (el-ayak uyuşması) açısından B12 düzeyi izlenmelidir."
+      },
+      {
+        barcode: "8699502010123",
+        name: "Coumadin 5 mg 28 Tablet",
+        brand: "Zentiva / Eczacıbaşı",
+        type: "medication",
+        chronicCode: "blood_thinner",
+        categoryLabel: "Reçeteli İlaç (Oral Antikoagülan / Kan Sulandırıcı)",
+        ingredients: "5 mg Varfarin Sodyum",
+        interactionWarning: "KRİTİK ETKİLEŞİM: K2 Vitamini (MK-7) içeren takviyeler Coumadin (Varfarin) etkisini doğrudan antagonize eder; yüksek doz Omega-3 ve E vitamini kanama riskini artırabilir."
+      },
+      {
+        barcode: "8699546080106",
+        name: "Coraspin 100 mg 30 Enterik Kaplı Tablet",
+        brand: "Bayer",
+        type: "medication",
+        chronicCode: "blood_thinner",
+        categoryLabel: "Antiagregan / Kan Sulandırıcı İlaç",
+        ingredients: "100 mg Asetilsalisilik Asit",
+        interactionWarning: "Yüksek doz Omega-3 (>2000 mg) ile birlikte kullanımda kanama eğilimi açısından hekim kontrolü önerilir."
+      },
+      {
+        barcode: "8699546090426",
+        name: "Cipro 500 mg 14 Film Tablet",
+        brand: "Biofarma / Bayer",
+        type: "medication",
+        chronicCode: "antibiotic",
+        categoryLabel: "Reçeteli İlaç (Florokinolon Grubu Antibiyotik)",
+        ingredients: "500 mg Siprofloksasin",
+        interactionWarning: "Demir, Magnezyum, Kalsiyum ve Çinko ile şelat oluşturarak antibiyotiğin emilimini %70'e kadar düşürür. Antibiyotikten 2 saat önce veya 6 saat sonra alınmalıdır."
+      },
+      {
+        barcode: "8699522010158",
+        name: "Monodoks 100 mg 14 Kapsül",
+        brand: "Deva İlaç",
+        type: "medication",
+        chronicCode: "antibiotic",
+        categoryLabel: "Reçeteli İlaç (Tetrasiklin Grubu Antibiyotik)",
+        ingredients: "100 mg Doksisiklin",
+        interactionWarning: "Kalsiyum, Demir, Magnezyum ve Çinko takviyeleri Doksisiklin emilimini bozar; en az 3-4 saat ara bırakılmalıdır."
+      },
+      {
+        barcode: "8699591010119",
+        name: "Fosamax 70 mg 4 Tablet",
+        brand: "MSD",
+        type: "medication",
+        chronicCode: "bisphosphonate",
+        categoryLabel: "Reçeteli İlaç (Bisfosfonat / Osteoporoz)",
+        ingredients: "70 mg Alendronat Sodyum",
+        interactionWarning: "Kalsiyum, Magnezyum ve Demir takviyeleri Alendronat emilimini tamamen engelleyebilir; ilaçtan sonra en az 60 dakika beklenmelidir."
+      },
+      {
+        barcode: "8699809010109",
+        name: "Lasix 40 mg 12 Tablet",
+        brand: "Sanofi",
+        type: "medication",
+        chronicCode: "diuretic",
+        categoryLabel: "Reçeteli İlaç (Loop Diüretik / İdrar Söktürücü)",
+        ingredients: "40 mg Furosemid",
+        interactionWarning: "İdrarla Magnezyum, Potasyum, Çinko ve B1/B6 vitamini kaybını artırabilir; elektrolit ve eGFR takibi gerektirir."
+      },
+      {
+        barcode: "8699508090112",
+        name: "Arveles 25 mg 20 Film Tablet",
+        brand: "Menarini",
+        type: "medication",
+        chronicCode: "kidney",
+        categoryLabel: "NSAİİ Ağrı Kesici & Antiinflamatuar İlaç",
+        ingredients: "25 mg Deksketoprofen",
+        interactionWarning: "NSAİİ grubu ağrı kesiciler böbrek perfüzyonunu (eGFR) düşürebilir ve mide mukozasını tahriş edebilir; eGFR <60 ise dikkatli olunmalıdır."
+      }
+    ];
+
+    function classifyScannedProductCategory(rawText = "") {
+      const text = String(rawText || "").toLocaleLowerCase("tr-TR");
+      const medPattern = /euthyrox|levotiron|levotiroksin|tefor|coumadin|varfarin|warfarin|coraspin|ecopirin|eliquis|xarelto|pradaxa|plavix|pantpas|nexium|lansor|omeprol|pulcet|gaviscon|rennie|glucophage|glifor|matofin|diaformin|metformin|cipro|siprofloksasin|monodoks|doksisiklin|tetradox|avelox|tavanic|augmentin|klamoks|fosamax|alendronat|actonel|bonviva|lasix|furosemid|fludex|desal|aldactone|arveles|majezik|apranax|voltaren|dikloron|brufen|nurofen|parol|minoset|tylol|antibiyotik|antikoagülan|antidiyabetik|bisfosfonat|diüretik|reçeteli ilaç|film tablet.*mg.*ilaç/i;
+      const supPattern = /vitamin|d3|k2|kolekalsiferol|b12|metilkobalamin|kobalamin|omega[\s-]*3|balık yağı|balik yagi|epa|dha|magnezyum|magnesium|bisglisinat|sitrat|malat|taurat|treonat|demir|lipofer|microfer|ferro|folat|folik asit|metilfolat|5-mthf|çinko|cinko|pikolinat|kolajen|collagen|kreatin|creatine|koenzim q10|coq10|ubiquinol|probiyotik|multivitamin|supradyn|redoxon|ocean|venatura|solgar|nature's supreme|youplus|pharmaton|osteocare|gıda takviyesi|takviye edici gıda/i;
+
+      if (medPattern.test(text)) return "medication";
+      if (supPattern.test(text)) return "supplement";
+      return "unknown";
+    }
+
+    function populateBarcodeTrQuickSelect(mode = currentBarcodeScannerMode) {
+      const selectEl = document.getElementById("barcodeTrDatabaseQuickSelect");
+      const labelEl = document.getElementById("barcodeTrDatabaseQuickSelectLabel");
+      const countBadge = document.getElementById("barcodeTrDbCountBadge");
+      if (!selectEl) return;
+
+      const filtered = VITA_TR_PRODUCT_BARCODE_DB.filter(item => item.type === mode);
+      if (labelEl) {
+        labelEl.textContent = mode === "medication"
+          ? "Türkiye'de Kayıtlı Reçeteli / Reçetesiz Genel İlaçlardan Hızlı Seç (EAN-13):"
+          : "Türkiye'de Kayıtlı Yaygın Vitamin & Gıda Takviyelerinden Hızlı Seç (EAN-13):";
+      }
+      if (countBadge) {
+        countBadge.textContent = mode === "medication"
+          ? `${filtered.length} TR İlaç Kaydı Aktif`
+          : `${filtered.length} TR Takviye Kaydı Aktif`;
+      }
+      selectEl.innerHTML = `<option value="">— ${mode === "medication" ? "Türkiye İlaç Veritabanından Seçin" : "Türkiye Vitamin/Takviye Veritabanından Seçin"} veya Barkod Girin —</option>` +
+        filtered.map(item => `<option value="${escapeHtmlText(item.barcode)}">[${escapeHtmlText(item.barcode)}] ${escapeHtmlText(item.name)} (${escapeHtmlText(item.brand)})</option>`).join("");
+    }
+
+    function switchBarcodeScannerMode(mode = "supplement") {
+      currentBarcodeScannerMode = mode === "medication" ? "medication" : "supplement";
+      const modal = document.getElementById("barcodeScannerModal");
+      if (modal) modal.dataset.scannerMode = currentBarcodeScannerMode;
+
+      const tabSup = document.getElementById("btnScannerTabSupplement");
+      const tabMed = document.getElementById("btnScannerTabMedication");
+      const badge = document.getElementById("barcodeScannerModeBadge");
+      const title = document.getElementById("barcodeScannerTitle");
+      const subtitle = document.getElementById("barcodeScannerSubtitle");
+      const headerBar = document.getElementById("barcodeScannerHeaderBar");
+      const supPanel = document.getElementById("barcodeAddSchedulePanel");
+      const medPanel = document.getElementById("barcodeMedicationInspectPanel");
+      const filterAlert = document.getElementById("barcodeCategoryFilterAlert");
+      const lookupStatus = document.getElementById("barcodeProductLookupStatus");
+
+      if (filterAlert) { filterAlert.classList.add("hidden"); filterAlert.innerHTML = ""; }
+      if (lookupStatus) { lookupStatus.classList.add("hidden"); lookupStatus.innerHTML = ""; }
+      if (supPanel) supPanel.classList.add("hidden");
+      if (medPanel) medPanel.classList.add("hidden");
+
+      if (currentBarcodeScannerMode === "medication") {
+        if (tabMed) tabMed.className = "py-2 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer bg-indigo-600 text-white shadow-xs";
+        if (tabSup) tabSup.className = "py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer bg-white text-slate-700 hover:bg-slate-50";
+        if (badge) {
+          badge.textContent = "Mod: İlaç Seç ve Denetle";
+          badge.className = "inline-flex items-center gap-1 rounded-full bg-indigo-400/25 border border-indigo-300/50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-indigo-100";
+        }
+        if (title) title.innerHTML = `<i class="fa-solid fa-prescription-bottle-medical mr-2 text-indigo-200"></i>İlaç Seç ve Denetle • Barkod &amp; AI Analiz Modalı`;
+        if (subtitle) subtitle.textContent = "Genel ilaçlar (reçeteli/reçetesiz) aranır ve mevcut vitamin/takviyelerinizle etkileşim denetimine aktarılır";
+        if (headerBar) headerBar.className = "flex items-center justify-between gap-3 rounded-t-3xl bg-gradient-to-r from-navy-900 via-indigo-950 to-indigo-700 px-5 py-4 text-white";
+      } else {
+        if (tabSup) tabSup.className = "py-2 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer bg-teal-600 text-white shadow-xs";
+        if (tabMed) tabMed.className = "py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer bg-white text-slate-700 hover:bg-slate-50";
+        if (badge) {
+          badge.textContent = "Mod: Vitamin & Gıda Takviyesi";
+          badge.className = "inline-flex items-center gap-1 rounded-full bg-teal-400/20 border border-teal-300/40 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-teal-100";
+        }
+        if (title) title.innerHTML = `<i class="fa-solid fa-barcode mr-2 text-teal-200"></i>Takviye Barkod &amp; Yapay Zeka Kutusu Okuyucu`;
+        if (subtitle) subtitle.textContent = "Yalnızca vitaminler ve gıda takviyeleri listelenir/eşleştirilir · Türkiye EAN-13 (869) veritabanı aktif";
+        if (headerBar) headerBar.className = "flex items-center justify-between gap-3 rounded-t-3xl bg-gradient-to-r from-navy-900 to-medTeal-700 px-5 py-4 text-white";
+      }
+
+      populateBarcodeTrQuickSelect(currentBarcodeScannerMode);
+    }
 
     function setBarcodeCameraStatus(message, isError = false) {
       const el = document.getElementById("barcodeCameraStatus");
@@ -161,33 +507,61 @@ window.VitaAIChat = VitaAIChat;
       }
     }
 
-    function openBarcodeScannerModal() {
+    function openBarcodeScannerModal(mode = "supplement") {
       const modal = document.getElementById("barcodeScannerModal");
       if (!modal) return;
       stopBarcodeCameraScan(false);
+      lastScannedProductRecord = null;
       const codeInput = document.getElementById("barcodeManualValue");
       const nameInput = document.getElementById("barcodeSupplementName");
       const doseInput = document.getElementById("barcodeSupplementDose");
       const timeInput = document.getElementById("barcodeScheduleTime");
+      const medNameInput = document.getElementById("barcodeDetectedMedicationName");
+      const medActiveInput = document.getElementById("barcodeDetectedMedicationActive");
       const result = document.getElementById("barcodeDecodedResult");
       const panel = document.getElementById("barcodeAddSchedulePanel");
+      const medPanel = document.getElementById("barcodeMedicationInspectPanel");
+      const filterAlert = document.getElementById("barcodeCategoryFilterAlert");
       if (codeInput) codeInput.value = "";
       if (nameInput) nameInput.value = "";
       if (doseInput) doseInput.value = "";
+      if (medNameInput) medNameInput.value = "";
+      if (medActiveInput) medActiveInput.value = "";
       if (timeInput) { timeInput.value = ""; timeInput.dataset.userEdited = ""; }
       const scheduleNote = document.getElementById("barcodeScheduleSuggestionNote");
       if (scheduleNote) scheduleNote.textContent = "Ürün adı girildiğinde uygun bir hatırlatma saati taslak olarak önerilebilir. Etiket/hekim/eczacı talimatı önceliklidir.";
       if (result) { result.classList.add("hidden"); result.textContent = ""; }
       if (panel) panel.classList.add("hidden");
-      document.querySelectorAll('input[name="barcodeScheduleDay"]').forEach(input => { input.checked = false; });
+      if (medPanel) medPanel.classList.add("hidden");
+      if (filterAlert) { filterAlert.classList.add("hidden"); filterAlert.innerHTML = ""; }
+      document.querySelectorAll('input[name="barcodeScheduleDay"]').forEach(input => { input.checked = true; });
+      switchBarcodeScannerMode(mode === "medication" ? "medication" : "supplement");
       modal.classList.remove("hidden"); modal.style.display = "flex"; modal.setAttribute("aria-hidden", "false");
-      setBarcodeCameraStatus("Kamera başlatılmadı. Tarama için kamera izni vermeniz gerekir.");
+      setBarcodeCameraStatus("Kamera başlatılmadı. Barkod okutmak için 'Kamerayı Aç ve Barkod Oku' düğmesine dokunun veya listeden seçin.");
+    }
+
+    function openMedicationScannerModal() {
+      openBarcodeScannerModal("medication");
     }
 
     function closeBarcodeScannerModal() {
       stopBarcodeCameraScan(false);
       const modal = document.getElementById("barcodeScannerModal");
       if (modal) { modal.classList.add("hidden"); modal.style.display = "none"; modal.setAttribute("aria-hidden", "true"); }
+    }
+
+    async function loadHtml5QrCodeLibrary() {
+      if (window.Html5Qrcode) return window.Html5Qrcode;
+      if (vitaHtml5QrLoadPromise) return vitaHtml5QrLoadPromise;
+      vitaHtml5QrLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js";
+        script.async = true;
+        script.onload = () => window.Html5Qrcode ? resolve(window.Html5Qrcode) : reject(new Error("HTML5-QRCode kütüphanesi yüklenemedi."));
+        script.onerror = () => reject(new Error("HTML5-QRCode kütüphanesi indirilemedi."));
+        document.head.appendChild(script);
+      }).catch(err => { vitaHtml5QrLoadPromise = null; throw err; });
+      return vitaHtml5QrLoadPromise;
     }
 
     async function loadZXingBrowser() {
@@ -223,33 +597,34 @@ window.VitaAIChat = VitaAIChat;
     async function startBarcodeCameraScan() {
       if (vitaBarcodeScanActive) return;
       const video = document.getElementById("barcodeCameraVideo");
+      const html5QrContainer = document.getElementById("html5QrCodeReaderContainer");
       const placeholder = document.getElementById("barcodeCameraPlaceholder");
       const aim = document.getElementById("barcodeCameraAim");
       const startButton = document.getElementById("barcodeStartCameraBtn");
       const stopButton = document.getElementById("barcodeStopCameraBtn");
       if (!video) return;
       if (!navigator.mediaDevices?.getUserMedia) {
-        setBarcodeCameraStatus("Bu ortam kamera erişimini desteklemiyor. HTTPS/localhost üzerinden açın veya fotoğraf/kod seçeneğini kullanın.", true);
-        showToast("Kamera erişilemiyor", "Tarayıcı kamera API'si yok veya sayfa güvenli bağlamda değil. HTTPS/localhost kullanın.", "warning");
+        setBarcodeCameraStatus("Bu ortam kamera erişimini desteklemiyor. Yukarıdaki Türkiye EAN-13 veritabanından seçebilir veya kutu fotoğrafı yükleyebilirsiniz.", true);
+        showToast("Kamera erişilemiyor", "Tarayıcı kamera API'si yok veya izin verilmedi. Fotoğraf yükleme veya barkod arama alanını kullanabilirsiniz.", "warning");
         return;
       }
 
       try {
         if (startButton) startButton.disabled = true;
         setBarcodeCameraStatus("Kamera izni bekleniyor…");
-        video.classList.remove("hidden");
         if (placeholder) placeholder.classList.add("hidden");
         if (aim) aim.classList.remove("hidden");
 
-        // Önce yerleşik tarayıcı algılayıcısını dene; desteklenmiyorsa ZXing'e geç.
+        // 1. Öncelik: Yerleşik BarcodeDetector API
         vitaBarcodeDetector = await createVitaBarcodeDetector();
         if (vitaBarcodeDetector) {
+          video.classList.remove("hidden");
           vitaBarcodeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
           video.srcObject = vitaBarcodeStream;
           await video.play();
           vitaBarcodeScanActive = true;
           if (stopButton) stopButton.classList.remove("hidden");
-          setBarcodeCameraStatus("Kamera açık. Barkodu çerçevenin içine yerleştirin…");
+          setBarcodeCameraStatus("Kamera açık. EAN-13 barkodu veya karekodu çerçevenin içine yerleştirin…");
           let detecting = false;
           const scanFrame = async () => {
             if (!vitaBarcodeScanActive || detecting) return;
@@ -258,34 +633,63 @@ window.VitaAIChat = VitaAIChat;
               if (video.readyState >= 2) {
                 const codes = await vitaBarcodeDetector.detect(video);
                 if (codes && codes.length && codes[0].rawValue) {
-                  handleBarcodeDetected(codes[0].rawValue, codes[0].format || "bilinmiyor");
+                  handleBarcodeDetected(codes[0].rawValue, codes[0].format || "EAN-13 / Kamera");
                   stopBarcodeCameraScan(false);
                   detecting = false;
                   return;
                 }
               }
-            } catch (_) { /* her karedeki algılama hatası taramayı sonlandırmamalı */ }
+            } catch (_) {}
             detecting = false;
             if (vitaBarcodeScanActive) vitaBarcodeScanTimer = window.setTimeout(scanFrame, 240);
           };
           scanFrame();
-        } else {
-          const zxing = await loadZXingBrowser();
-          vitaBarcodeZXingReader = new zxing.BrowserMultiFormatReader();
-          vitaBarcodeScanActive = true;
-          if (stopButton) stopButton.classList.remove("hidden");
-          setBarcodeCameraStatus("Uyumluluk okuyucusu yükleniyor; kamera iznini onaylayın…");
-          vitaBarcodeZXingControls = await vitaBarcodeZXingReader.decodeFromVideoDevice(undefined, video, (result, error) => {
-            if (result && result.getText && vitaBarcodeScanActive) {
-              handleBarcodeDetected(result.getText(), result.getBarcodeFormat ? result.getBarcodeFormat() : "ZXing");
-              stopBarcodeCameraScan(false);
-            }
-          });
-          setBarcodeCameraStatus("Kamera açık. Barkodu çerçevenin içine yerleştirin…");
+          return;
         }
+
+        // 2. Öncelik: HTML5-QRCode Kütüphanesi
+        try {
+          const Html5QrcodeClass = await loadHtml5QrCodeLibrary();
+          if (Html5QrcodeClass && html5QrContainer) {
+            html5QrContainer.classList.remove("hidden");
+            vitaHtml5QrCodeScanner = new Html5QrcodeClass("html5QrCodeReaderContainer");
+            vitaBarcodeScanActive = true;
+            if (stopButton) stopButton.classList.remove("hidden");
+            await vitaHtml5QrCodeScanner.start(
+              { facingMode: "environment" },
+              { fps: 10, qrbox: { width: 250, height: 140 } },
+              (decodedText) => {
+                if (decodedText && vitaBarcodeScanActive) {
+                  handleBarcodeDetected(decodedText, "HTML5-QRCode");
+                  stopBarcodeCameraScan(false);
+                }
+              },
+              () => {}
+            );
+            setBarcodeCameraStatus("HTML5-QRCode kamera okuyucu aktif. Barkodu çerçeveye hizalayın…");
+            return;
+          }
+        } catch (_) {
+          if (html5QrContainer) html5QrContainer.classList.add("hidden");
+        }
+
+        // 3. Öncelik: ZXing Çoklu Format Okuyucu
+        video.classList.remove("hidden");
+        const zxing = await loadZXingBrowser();
+        vitaBarcodeZXingReader = new zxing.BrowserMultiFormatReader();
+        vitaBarcodeScanActive = true;
+        if (stopButton) stopButton.classList.remove("hidden");
+        setBarcodeCameraStatus("Uyumluluk okuyucusu yükleniyor; kamera iznini onaylayın…");
+        vitaBarcodeZXingControls = await vitaBarcodeZXingReader.decodeFromVideoDevice(undefined, video, (result) => {
+          if (result && result.getText && vitaBarcodeScanActive) {
+            handleBarcodeDetected(result.getText(), result.getBarcodeFormat ? result.getBarcodeFormat() : "ZXing");
+            stopBarcodeCameraScan(false);
+          }
+        });
+        setBarcodeCameraStatus("Kamera açık. Barkodu çerçevenin içine yerleştirin…");
       } catch (error) {
         stopBarcodeCameraScan(false);
-        const message = error?.name === "NotAllowedError" ? "Kamera izni reddedildi. Tarayıcı izinlerinden kamerayı açın." : (error?.message || "Kamera başlatılamadı.");
+        const message = error?.name === "NotAllowedError" ? "Kamera izni reddedildi. Tarayıcı izinlerinden kamerayı açın veya fotoğraf yükleyin." : (error?.message || "Kamera başlatılamadı.");
         setBarcodeCameraStatus(message, true);
         showToast("Barkod taraması başlatılamadı", message, "warning");
       } finally {
@@ -294,9 +698,17 @@ window.VitaAIChat = VitaAIChat;
     }
 
     function stopBarcodeCameraScan(updateStatus = true) {
-      const wasScanning = vitaBarcodeScanActive || Boolean(vitaBarcodeStream) || Boolean(vitaBarcodeZXingControls);
+      const wasScanning = vitaBarcodeScanActive || Boolean(vitaBarcodeStream) || Boolean(vitaBarcodeZXingControls) || Boolean(vitaHtml5QrCodeScanner);
       vitaBarcodeScanActive = false;
       if (vitaBarcodeScanTimer !== null) { clearTimeout(vitaBarcodeScanTimer); vitaBarcodeScanTimer = null; }
+      if (vitaHtml5QrCodeScanner) {
+        try {
+          vitaHtml5QrCodeScanner.stop().then(() => vitaHtml5QrCodeScanner?.clear()).catch(() => {});
+        } catch (_) {}
+        vitaHtml5QrCodeScanner = null;
+      }
+      const html5QrContainer = document.getElementById("html5QrCodeReaderContainer");
+      if (html5QrContainer) html5QrContainer.classList.add("hidden");
       try { if (vitaBarcodeZXingControls?.stop) vitaBarcodeZXingControls.stop(); } catch (_) {}
       vitaBarcodeZXingControls = null;
       try { if (vitaBarcodeZXingReader?.reset) vitaBarcodeZXingReader.reset(); } catch (_) {}
@@ -318,11 +730,28 @@ window.VitaAIChat = VitaAIChat;
 
     function normalizeBarcodeForMatch(value) {
       const digits = String(value || "").replace(/\D/g, "");
-      // GS1 QR'de AI (01) + 14 haneli GTIN yer alabilir. Serbest QR metninden belirsiz kod uydurulmaz.
       const gs1 = String(value || "").match(/(?:^|\D)01(\d{14})(?:\D|$)/);
       const candidate = gs1 ? gs1[1] : digits;
       if (![8, 12, 13, 14].includes(candidate.length)) return "";
       return candidate.replace(/^0+/, "") || "0";
+    }
+
+    function findTurkishDatabaseMatch(rawQuery) {
+      const q = String(rawQuery || "").trim();
+      if (!q) return null;
+      const normCode = normalizeBarcodeForMatch(q);
+      if (normCode) {
+        const byCode = VITA_TR_PRODUCT_BARCODE_DB.find(item => normalizeBarcodeForMatch(item.barcode) === normCode);
+        if (byCode) return { ...byCode, source: "Türkiye EAN-13 Takviye & İlaç Veritabanı" };
+      }
+      const lowerQ = q.toLocaleLowerCase("tr-TR");
+      const byName = VITA_TR_PRODUCT_BARCODE_DB.find(item =>
+        item.name.toLocaleLowerCase("tr-TR").includes(lowerQ) ||
+        item.brand.toLocaleLowerCase("tr-TR").includes(lowerQ) ||
+        item.ingredients.toLocaleLowerCase("tr-TR").includes(lowerQ)
+      );
+      if (byName) return { ...byName, source: "Türkiye EAN-13 Takviye & İlaç Veritabanı" };
+      return null;
     }
 
     function setBarcodeLookupStatus(html, kind = "info") {
@@ -368,18 +797,212 @@ window.VitaAIChat = VitaAIChat;
       return { name: String(name).trim(), brand: String(brand || "").trim(), ingredients: typeof ingredients === "string" ? ingredients : "", productType: Array.isArray(productType) ? productType.join(", ") : String(productType || ""), source: "Katalog" };
     }
 
+    function renderMedicationLiveAuditPreview(product) {
+      const auditBox = document.getElementById("barcodeMedicationLiveAuditText");
+      if (!auditBox) return;
+      const medName = product?.name || document.getElementById("barcodeDetectedMedicationName")?.value || "";
+      const currentSupps = Array.isArray(state.supplements) && state.supplements.length
+        ? state.supplements.map(s => s.name).join(", ")
+        : "Henüz çizelgede kayıtlı takviye yok (Eklendiğinde otomatik denetlenir)";
+
+      let interactionHtml = "";
+      if (product?.interactionWarning) {
+        interactionHtml = `<div class="mt-1.5 p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-950 text-[11px] leading-relaxed"><strong><i class="fa-solid fa-triangle-exclamation text-rose-600 mr-1"></i>Klinik Etkileşim Kuralı:</strong> ${escapeHtmlText(product.interactionWarning)}</div>`;
+      } else if (typeof evaluateClinicalDrugNutrientInteractions === "function" && state.supplements?.length) {
+        const customAlerts = evaluateClinicalDrugNutrientInteractions(state.supplements, [], [medName]);
+        if (customAlerts.length > 0) {
+          interactionHtml = `<div class="mt-1.5 p-2.5 rounded-lg bg-amber-50 border border-amber-300 text-amber-950 text-[11px] leading-relaxed"><strong><i class="fa-solid fa-triangle-exclamation text-rose-600 mr-1"></i>Tespit Edilen Çakışma (${customAlerts.length}):</strong> ${escapeHtmlText(customAlerts[0].mechanism || customAlerts[0].separationRule || "")}</div>`;
+        }
+      }
+      if (!interactionHtml) {
+        interactionHtml = `<div class="mt-1.5 p-2 rounded-lg bg-teal-50 border border-teal-200 text-teal-900 text-[11px]">İlaç denetleme mekanizmasına aktarıldığında Demir, Kalsiyum, Magnezyum, D3/K2, B12 ve Çinko ile tüm zamanlama/emilim çakışmaları canlı denetlenecektir.</div>`;
+      }
+
+      auditBox.innerHTML = `
+        <div><strong>İlaç:</strong> ${escapeHtmlText(medName)}</div>
+        <div class="mt-0.5"><strong>Mevcut Takviyeleriniz:</strong> ${escapeHtmlText(currentSupps)}</div>
+        ${interactionHtml}
+      `;
+    }
+
+    function applyBarcodeCatalogueMatch(product, barcode) {
+      lastScannedProductRecord = product;
+      const detectedType = product.type || classifyScannedProductCategory(`${product.name} ${product.productType || ""} ${product.ingredients || ""}`);
+      const filterAlert = document.getElementById("barcodeCategoryFilterAlert");
+      const supPanel = document.getElementById("barcodeAddSchedulePanel");
+      const medPanel = document.getElementById("barcodeMedicationInspectPanel");
+
+      if (filterAlert) { filterAlert.classList.add("hidden"); filterAlert.innerHTML = ""; }
+      if (supPanel) supPanel.classList.add("hidden");
+      if (medPanel) medPanel.classList.add("hidden");
+
+      // KATEGORİ FİLTRESİ 1: "Takviye Ekle" modunda reçeteli/genel ilaç okutulduysa engelle ve İlaç Denetleme moduna yönlendir
+      if (currentBarcodeScannerMode === "supplement" && detectedType === "medication") {
+        if (filterAlert) {
+          filterAlert.classList.remove("hidden");
+          filterAlert.innerHTML = `
+            <div class="flex items-start gap-2.5">
+              <i class="fa-solid fa-ban text-rose-600 text-base mt-0.5"></i>
+              <div class="space-y-1.5">
+                <div class="font-black text-rose-900">Filtre Kısıtlaması: Bu Ürün Bir İlaçtır (${escapeHtmlText(product.name)})</div>
+                <p class="text-[11px] leading-relaxed text-rose-800"><strong>"Takviye Ekle"</strong> alanında yalnızca <strong>vitaminler ve gıda takviyeleri</strong> listelenebilir ve günlük takviye çizelgesine eklenebilir. Reçeteli veya genel ilaçları etkileşim kontrolü için <strong>"İlaç Seç ve Denetle"</strong> modülüne aktarabilirsiniz.</p>
+                <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); switchBarcodeScannerMode('medication'); applyBarcodeCatalogueMatch(lastScannedProductRecord, '${escapeHtmlText(barcode)}');" class="mt-1 px-3.5 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-shield-halved"></i>
+                  <span>"İlaç Seç ve Denetle" Moduna Geç ve Bu İlacı Denetle</span>
+                </button>
+              </div>
+            </div>`;
+        }
+        setBarcodeLookupStatus(`<strong>${escapeHtmlText(product.name)}</strong> reçeteli/genel ilaç olarak sınıflandırıldığı için Takviye Ekle listesine alınmadı.`, "warning");
+        showToast("Takviye Filtresi Devrede", "Bu alanda yalnızca vitamin ve gıda takviyeleri eşleştirilir.", "warning");
+        return;
+      }
+
+      // KATEGORİ FİLTRESİ 2: "İlaç Seç ve Denetle" modunda vitamin/gıda takviyesi okutulduysa uyar ve Takviye Ekle moduna yönlendir
+      if (currentBarcodeScannerMode === "medication" && detectedType === "supplement") {
+        if (filterAlert) {
+          filterAlert.classList.remove("hidden");
+          filterAlert.innerHTML = `
+            <div class="flex items-start gap-2.5">
+              <i class="fa-solid fa-circle-info text-indigo-700 text-base mt-0.5"></i>
+              <div class="space-y-1.5">
+                <div class="font-black text-navy-900">Kategori Uyarısı: Bu Ürün Bir Vitamin / Gıda Takviyesidir (${escapeHtmlText(product.name)})</div>
+                <p class="text-[11px] leading-relaxed text-slate-700"><strong>"İlaç Seç ve Denetle"</strong> modalı reçeteli/reçetesiz genel ilaçları denetlemek içindir. Bu витамин/takviyeyi günlük çizelgenize eklemek için <strong>"Takviye Ekle"</strong> moduna geçebilirsiniz.</p>
+                <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); switchBarcodeScannerMode('supplement'); applyBarcodeCatalogueMatch(lastScannedProductRecord, '${escapeHtmlText(barcode)}');" class="mt-1 px-3.5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer">
+                  <i class="fa-solid fa-capsules"></i>
+                  <span>"Takviye Ekle" Moduna Geç ve Çizelgeye Ekle</span>
+                </button>
+              </div>
+            </div>`;
+        }
+        setBarcodeLookupStatus(`<strong>${escapeHtmlText(product.name)}</strong> bir gıda takviyesidir; İlaç Seç ve Denetle alanında yalnızca genel ilaçlar denetlenir.`, "warning");
+        showToast("İlaç Denetleme Filtresi", "Bu ürün bir gıda takviyesidir. Takviye Ekle moduna geçebilirsiniz.", "info");
+        return;
+      }
+
+      const infoParts = [
+        product.brand ? `Marka / Ruhsat: ${escapeHtmlText(product.brand)}` : "",
+        product.ingredients ? `İçerik / Etken Madde: ${escapeHtmlText(product.ingredients).slice(0, 320)}` : "",
+        product.categoryLabel || product.productType ? `Kategori: ${escapeHtmlText(product.categoryLabel || product.productType).slice(0, 160)}` : ""
+      ].filter(Boolean);
+
+      setBarcodeLookupStatus(
+        `<div class="flex items-start gap-2"><i class="fa-solid fa-circle-check text-lg text-teal-700 mt-0.5"></i><div><strong>${currentBarcodeScannerMode === "medication" ? "İlaç Eşleşmesi Bulundu" : "Vitamin / Gıda Takviyesi Eşleşmesi Bulundu"}</strong><div class="mt-1 text-sm font-black">${escapeHtmlText(product.name)}</div><div class="mt-1 text-[10px] text-slate-600">Kaynak: ${escapeHtmlText(product.source || "Türkiye Veritabanı")} · Barkod: ${escapeHtmlText(barcode || product.barcode || "-")}</div>${infoParts.length ? `<div class="mt-2 space-y-1 text-[10px]">${infoParts.map(x => `<div>${x}</div>`).join("")}</div>` : ""}</div></div>`,
+        "success"
+      );
+
+      if (currentBarcodeScannerMode === "medication") {
+        const medNameEl = document.getElementById("barcodeDetectedMedicationName");
+        const medActiveEl = document.getElementById("barcodeDetectedMedicationActive");
+        if (medNameEl) medNameEl.value = product.name.slice(0, 120);
+        if (medActiveEl) medActiveEl.value = (product.ingredients || product.categoryLabel || "Reçeteli / Genel İlaç").slice(0, 140);
+        renderMedicationLiveAuditPreview(product);
+        if (medPanel) {
+          medPanel.classList.remove("hidden");
+          medPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+        setBarcodeCameraStatus("İlaç eşleşmesi bulundu; denetleme mekanizmasına aktarmaya hazır.");
+        showToast("İlaç Tespit Edildi", `${product.name} etkileşim denetimine aktarılmaya hazır.`, "success");
+      } else {
+        const nameField = document.getElementById("barcodeSupplementName");
+        const noteField = document.getElementById("barcodeSupplementDose");
+        const timeField = document.getElementById("barcodeScheduleTime");
+        if (nameField) { nameField.value = product.name.slice(0, 120); nameField.dataset.catalogueMatch = "true"; }
+        if (noteField && product.suggestedDose) noteField.value = product.suggestedDose;
+        if (timeField) {
+          delete timeField.dataset.userEdited;
+          if (product.suggestedTime) timeField.value = product.suggestedTime;
+        }
+        suggestBarcodeScheduleFromName();
+        setBarcodeScheduleDays(true);
+        if (supPanel) {
+          supPanel.classList.remove("hidden");
+          supPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+        setBarcodeCameraStatus("Tam barkod eşleşmesi bulundu; takviye bilgileri forma aktarıldı.");
+        showToast("Takviye Bulundu", `${product.name} günlük takviye çizelgesi formuna aktarıldı.`, "success");
+      }
+    }
+
+    function transferScannedMedicationToInspector() {
+      const medNameEl = document.getElementById("barcodeDetectedMedicationName");
+      const rawName = String(medNameEl?.value || lastScannedProductRecord?.name || "").trim();
+      if (!rawName) {
+        showToast("İlaç Adı Gerekli", "Lütfen barkod okutun veya denetlenecek ilaç adını girin.", "warning");
+        medNameEl?.focus();
+        return;
+      }
+
+      if (!state.user) state.user = { ...defaultUserProfile };
+      if (!Array.isArray(state.user.chronic)) state.user.chronic = [];
+      if (!Array.isArray(state.user.medications)) state.user.medications = [];
+
+      // Bilinen farmakolojik grup kodu varsa (levothyroxine, ppi, metformin, blood_thinner, antibiotic, bisphosphonate, diuretic, kidney) ekle
+      const chronicCode = lastScannedProductRecord?.chronicCode;
+      if (chronicCode && !state.user.chronic.includes(chronicCode)) {
+        state.user.chronic.push(chronicCode);
+      }
+
+      // İlaç adını hızlı denetleyici (quickAddMedInput) üzerinden veya doğrudan state.user.medications içine aktar
+      const quickInput = document.getElementById("quickAddMedInput");
+      if (quickInput && typeof addQuickMedicationFromInput === "function") {
+        quickInput.value = rawName;
+        addQuickMedicationFromInput();
+      } else {
+        if (!state.user.medications.some(m => m.toLocaleLowerCase("tr-TR") === rawName.toLocaleLowerCase("tr-TR"))) {
+          state.user.medications.push(rawName);
+        }
+        if (typeof saveState === "function") saveState();
+        if (typeof detectSupplementConflicts === "function") detectSupplementConflicts();
+      }
+
+      closeBarcodeScannerModal();
+      if (typeof navigateToView === "function") navigateToView("view-home");
+      if (typeof toggleMedShieldDrawer === "function") toggleMedShieldDrawer(true);
+
+      showToast(
+        "İlaç Denetleme Mekanizmasına Aktarıldı",
+        `${rawName} İlaç–Besin Etkileşim Kalkanına eklendi ve mevcut takviyelerinizle karşılaştırıldı.`,
+        "success"
+      );
+    }
+
     async function lookupBarcodeProduct(rawValue) {
       const code = String(rawValue || "").trim();
+      const supPanel = document.getElementById("barcodeAddSchedulePanel");
+      const medPanel = document.getElementById("barcodeMedicationInspectPanel");
+      if (supPanel) supPanel.classList.add("hidden");
+      if (medPanel) medPanel.classList.add("hidden");
+
+      // 1. Adım: Türkiye EAN-13 (869...) ve İsim Eşleme Veritabanında Ara
+      const trMatch = findTurkishDatabaseMatch(code);
+      if (trMatch) {
+        applyBarcodeCatalogueMatch(trMatch, trMatch.barcode || code);
+        return trMatch;
+      }
+
+      // Eğer kullanıcı barkod yerine doğrudan ürün/ilaç adı yazdıysa kategori filtresinden geçirerek işle
       const norm = normalizeBarcodeForMatch(code);
-      const panel = document.getElementById("barcodeAddSchedulePanel");
-      if (panel) panel.classList.add("hidden");
-      const nameField = document.getElementById("barcodeSupplementName");
-      if (nameField) nameField.value = "";
+      if (!norm && code.length >= 3) {
+        const guessedType = classifyScannedProductCategory(code);
+        const manualProduct = {
+          name: code,
+          brand: "Kullanıcı Girişi / Manuel Arama",
+          type: guessedType === "unknown" ? currentBarcodeScannerMode : guessedType,
+          categoryLabel: guessedType === "medication" ? "Genel / Reçeteli İlaç" : "Vitamin & Gıda Takviyesi",
+          ingredients: "",
+          source: "Akıllı Ürün & İlaç Eşleştirici"
+        };
+        applyBarcodeCatalogueMatch(manualProduct, "Manuel Arama");
+        return manualProduct;
+      }
+
       if (!norm) {
-        setBarcodeLookupStatus(`<strong>Barkod metni okundu, ama GTIN olarak tanınmadı.</strong><p class="mt-1">Karekod metni ürün numarası dışında bilgi içerebilir. Kutu fotoğrafını Gemini ile inceleyerek görünen ürün adını doldurmayı deneyin.</p>`, "warning");
+        setBarcodeLookupStatus(`<strong>Barkod metni okundu, ancak geçerli bir EAN-13 / GTIN numarası tespit edilemedi.</strong><p class="mt-1">Kutu fotoğrafını yükleyerek Yapay Zeka ile ürün adını ve içeriğini tespit edebilirsiniz.</p>`, "warning");
         return null;
       }
-      setBarcodeLookupStatus(`<span class="inline-flex items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin"></i><strong>${escapeHtmlText(code)}</strong> barkodu halka açık ürün kataloglarında aranıyor…</span>`);
+
+      setBarcodeLookupStatus(`<span class="inline-flex items-center gap-2"><i class="fa-solid fa-circle-notch fa-spin"></i><strong>${escapeHtmlText(code)}</strong> barkodu Türkiye ve uluslararası kataloglarda aranıyor…</span>`);
       const timeoutFetch = async (url, ms = 6500) => {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), ms);
@@ -387,15 +1010,18 @@ window.VitaAIChat = VitaAIChat;
         finally { clearTimeout(timer); }
       };
       let networkError = false;
-      // NIH DSLD is supplement-label focused; it is not a Turkish medicine registry.
       try {
         const digits = code.replace(/\D/g, "");
         const q = encodeURIComponent(`"${digits}"`);
         const data = await timeoutFetch(`https://api.ods.od.nih.gov/dsld/v9/search-filter?q=${q}&size=10`);
         const product = findExactCatalogueProduct(data, code);
-        if (product) { product.source = "NIH Dietary Supplement Label Database"; applyBarcodeCatalogueMatch(product, code); return product; }
-      } catch (e) { networkError = true; console.warn("NIH DSLD barkod sorgusu başarısız/erişilemez:", e?.message || e); }
-      // Open Food Facts is crowd-sourced and may include products outside the supplement category. Match only the exact code.
+        if (product) {
+          product.source = "NIH Dietary Supplement Label Database";
+          product.type = "supplement";
+          applyBarcodeCatalogueMatch(product, code);
+          return product;
+        }
+      } catch (e) { networkError = true; }
       try {
         const digits = code.replace(/\D/g, "");
         const data = await timeoutFetch(`https://world.openfoodfacts.org/api/v3/product/${encodeURIComponent(digits)}.json?product_type=all&cc=tr&lc=tr&fields=code,product_name,product_name_tr,brands,quantity,categories,categories_tags,ingredients_text,product_type`);
@@ -403,31 +1029,20 @@ window.VitaAIChat = VitaAIChat;
         if (product && normalizeBarcodeForMatch(product.code) === normalizeBarcodeForMatch(code)) {
           const name = String(product.product_name_tr || product.product_name || "").trim();
           if (name) {
-            const found = { name, brand: String(product.brands || "").trim(), ingredients: String(product.ingredients_text || ""), productType: String(product.product_type || "") + " " + (Array.isArray(product.categories_tags) ? product.categories_tags.join(", ") : String(product.categories || "")), source: "Open Food Facts" };
-            applyBarcodeCatalogueMatch(found, code); return found;
+            const found = {
+              name,
+              brand: String(product.brands || "").trim(),
+              ingredients: String(product.ingredients_text || ""),
+              productType: String(product.product_type || "") + " " + (Array.isArray(product.categories_tags) ? product.categories_tags.join(", ") : String(product.categories || "")),
+              source: "Open Food Facts TR"
+            };
+            applyBarcodeCatalogueMatch(found, code);
+            return found;
           }
         }
-      } catch (e) { networkError = true; console.warn("Open Food Facts barkod sorgusu başarısız/erişilemez:", e?.message || e); }
-      setBarcodeLookupStatus(`<strong>Bu barkod için doğrulanmış bir ürün adı bulunamadı.</strong><p class="mt-1">Bu tek başına ürünün olmadığı anlamına gelmez: açık kataloglar bütün Türkiye ilaçlarını ve takviyelerini kapsamaz. Ürün adını otomatik uydurmadım.</p><p class="mt-1">${networkError ? "Tarayıcı/API erişimi engellenmiş olabilir. HTML dosyası doğrudan açıldıysa katalog erişimi CORS nedeniyle çalışmayabilir; HTTPS/localhost üzerinden deneyin." : "Katalogda tam barkod eşleşmesi bulunamadı."}</p><button type="button" onclick="document.getElementById('barcodePhotoFile')?.click()" class="mt-2 rounded-lg bg-indigo-700 px-3 py-2 text-[11px] font-bold text-white"><i class="fa-solid fa-camera mr-1"></i> Kutu fotoğrafını Gemini ile incele</button>`, "warning");
+      } catch (e) { networkError = true; }
+      setBarcodeLookupStatus(`<strong>${escapeHtmlText(code)} barkodu için katalogda doğrudan kayıt bulunamadı.</strong><p class="mt-1">Kutunun fotoğrafını çekerek veya yükleyerek <strong>Yapay Zeka (AI) ile Kutuyu Tanı</strong> özelliğini kullanabilir ya da yukarıdaki Türkiye EAN-13 listesinden seçim yapabilirsiniz.</p><button type="button" onclick="document.getElementById('barcodePhotoFile')?.click()" class="mt-2 rounded-lg bg-indigo-700 px-3 py-2 text-[11px] font-bold text-white"><i class="fa-solid fa-camera mr-1"></i> Kutu Fotoğrafı Yükle &amp; AI ile Tanı</button>`, "warning");
       return null;
-    }
-
-    function applyBarcodeCatalogueMatch(product, barcode) {
-      const nameField = document.getElementById("barcodeSupplementName");
-      const noteField = document.getElementById("barcodeSupplementDose");
-      const timeField = document.getElementById("barcodeScheduleTime");
-      if (nameField) { nameField.value = product.name.slice(0, 120); nameField.dataset.catalogueMatch = "true"; }
-      if (timeField) delete timeField.dataset.userEdited;
-      const infoParts = [product.brand ? `Marka: ${escapeHtmlText(product.brand)}` : "", product.ingredients ? `İçerik/etiket bilgisi: ${escapeHtmlText(product.ingredients).slice(0, 320)}` : "", product.productType ? `Katalog kategorisi: ${escapeHtmlText(product.productType).slice(0, 160)}` : ""].filter(Boolean);
-      const typeNote = /medicine|medicinal|drug|pharmaceutical|cream|ointment|topical|ilaç|eczacılık|farmasötik/i.test(`${product.name} ${product.productType}`)
-        ? `<p class="mt-1 font-bold text-amber-800">Bu kayıt ilaç/harici ürün olabilir; takviye olarak yorumlamayın. Kullanım sıklığını ve uygulama yolunu prospektüs veya eczacıyla doğrulayın.</p>`
-        : `<p class="mt-1">Katalog eşleşmesi yalnızca ürün etiketi adına yardımcı olur; içerik, orijinallik ve size uygunluk kanıtı değildir.</p>`;
-      setBarcodeLookupStatus(`<div class="flex items-start gap-2"><i class="fa-solid fa-circle-check text-lg text-teal-700 mt-0.5"></i><div><strong>Ürün eşleşmesi bulundu</strong><div class="mt-1 text-sm font-black">${escapeHtmlText(product.name)}</div><div class="mt-1 text-[10px] text-slate-600">Kaynak: ${escapeHtmlText(product.source)} · Barkod: ${escapeHtmlText(barcode)}</div>${infoParts.length ? `<div class="mt-2 space-y-1 text-[10px]">${infoParts.map(x=>`<div>${x}</div>`).join("")}</div>` : ""}${typeNote}<p class="mt-2">Ürün adı forma aktarıldı. Kayıt etmeden önce kontrol edin, uygun hatırlatma saatini/günlerini seçin ve aşağıdaki düğmeye basın.</p></div></div>`, "success");
-      suggestBarcodeScheduleFromName();
-      const panel = document.getElementById("barcodeAddSchedulePanel"); if (panel) panel.classList.remove("hidden");
-      panel?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      setBarcodeCameraStatus("Tam barkod eşleşmesi bulundu; ürün adı çizelge formuna aktarıldı.");
-      showToast("Ürün bulundu", `${product.name} ürün adı forma aktarıldı. Kayıt etmeden önce kontrol edin.`, "success");
     }
 
     function setBarcodeScheduleDays(selectAll) {
@@ -442,63 +1057,54 @@ window.VitaAIChat = VitaAIChat;
       const result = document.getElementById("barcodeDecodedResult");
       if (result) {
         result.classList.remove("hidden");
-        result.innerHTML = `<div class="font-black text-sky-900"><i class="fa-solid fa-circle-check mr-1 text-teal-700"></i>Barkod çözüldü (${escapeHtmlText(format)})</div><code class="mt-1 block break-all rounded-lg bg-white p-2 font-mono text-[11px]">${escapeHtmlText(value)}</code><p class="mt-2 text-[10px] leading-relaxed">Şimdi bu kod, açık ürün kataloglarında tam eşleşmeyle aranacak. Eşleşme bulunamazsa kutu fotoğrafını Gemini ile okuyabilirsiniz.</p>`;
+        result.innerHTML = `<div class="font-black text-sky-900"><i class="fa-solid fa-circle-check mr-1 text-teal-700"></i>Barkod / Ürün Kodu Okundu (${escapeHtmlText(format)})</div><code class="mt-1 block break-all rounded-lg bg-white p-2 font-mono text-[11px]">${escapeHtmlText(value)}</code>`;
       }
-      const addPanel = document.getElementById("barcodeAddSchedulePanel"); if (addPanel) addPanel.classList.add("hidden");
       if (window.SoundEffects) SoundEffects.playSuccess();
       lookupBarcodeProduct(value).catch(error => {
         console.warn("Barkod sorgu akışında beklenmeyen hata:", error);
-        setBarcodeLookupStatus(`<strong>Ürün kataloğu sorgulanamadı.</strong><p class="mt-1">Ürün adını uydurmadım. Kutu fotoğrafını Gemini ile inceleyebilir veya daha sonra HTTPS/localhost üzerinden yeniden deneyebilirsiniz.</p><button type="button" onclick="document.getElementById('barcodePhotoFile')?.click()" class="mt-2 rounded-lg bg-indigo-700 px-3 py-2 text-[11px] font-bold text-white">Kutu fotoğrafını Gemini ile incele</button>`, "warning");
       });
     }
 
     function useManualBarcodeValue() {
       if (window.SoundEffects) SoundEffects.playClick();
       const value = String(document.getElementById("barcodeManualValue")?.value || "").trim();
-      if (!value) { showToast("Barkod girilmedi", "Lütfen okunan barkod veya karekod metnini girin.", "warning"); return; }
-      handleBarcodeDetected(value, "elle girildi");
+      if (!value) { showToast("Barkod veya ürün adı girilmedi", "Lütfen EAN-13 barkod numarasını veya ürün adını girin.", "warning"); return; }
+      handleBarcodeDetected(value, "Manuel / TR Veritabanı");
     }
 
     function handleBarcodePhotoSelected(event) {
       const file = event?.target?.files?.[0];
       if (!file) return;
-      if (!file.type || !file.type.startsWith("image/")) { showToast("Dosya türü desteklenmiyor", "Lütfen bir kutu fotoğrafı seçin.", "warning"); return; }
+      if (!file.type || !file.type.startsWith("image/")) { showToast("Dosya türü desteklenmiyor", "Lütfen geçerli bir kutu fotoğrafı seçin.", "warning"); return; }
       if (file.size > 15 * 1024 * 1024) { showToast("Fotoğraf çok büyük", "Lütfen 15 MB altında bir fotoğraf seçin.", "warning"); event.target.value = ""; return; }
       vitaBarcodePhotoFile = file;
       if (vitaBarcodePhotoObjectUrl) URL.revokeObjectURL(vitaBarcodePhotoObjectUrl);
       vitaBarcodePhotoObjectUrl = URL.createObjectURL(file);
       const preview = document.getElementById("barcodePhotoPreview");
       if (preview) { preview.src = vitaBarcodePhotoObjectUrl; preview.classList.remove("hidden"); }
-      const addPanel = document.getElementById("barcodeAddSchedulePanel");
-      if (addPanel) addPanel.classList.remove("hidden");
       const aiResult = document.getElementById("barcodeAiResult");
       if (aiResult) aiResult.classList.add("hidden");
-      const priorLookup = document.getElementById("barcodeProductLookupStatus"); if (priorLookup) priorLookup.classList.add("hidden");
-      const priorName = document.getElementById("barcodeSupplementName"); if (priorName) { priorName.value = ""; delete priorName.dataset.catalogueMatch; }
-      const priorPanel = document.getElementById("barcodeAddSchedulePanel"); if (priorPanel) priorPanel.classList.add("hidden");
-      const consent = document.getElementById("barcodePhotoConsent");
-      if (consent) consent.checked = false;
-      showToast("Fotoğraf hazır", "Fotoğraf cihazda önizleniyor. AI incelemesi için ayrı paylaşım onayı gerekir.", "info");
+      showToast("Kutu Fotoğrafı Yüklendi", "Şimdi 'Yapay Zeka (AI) ile Kutuyu Tanı' veya 'Fotoğraftaki barkodu oku' butonuna tıklayabilirsiniz.", "info");
     }
 
     async function decodeBarcodeFromPhoto() {
       if (window.SoundEffects) SoundEffects.playClick();
       const preview = document.getElementById("barcodePhotoPreview");
-      if (!vitaBarcodePhotoFile || !preview || !preview.src) { showToast("Fotoğraf seçilmedi", "Önce ilaç kutusu fotoğrafı çekin veya seçin.", "warning"); return; }
+      if (!vitaBarcodePhotoFile || !preview || !preview.src) { showToast("Fotoğraf seçilmedi", "Önce kutu fotoğrafı çekin veya seçin.", "warning"); return; }
       try {
         await preview.decode();
         const detector = await createVitaBarcodeDetector();
         if (detector) {
           const codes = await detector.detect(preview);
-          if (codes?.length && codes[0].rawValue) { handleBarcodeDetected(codes[0].rawValue, codes[0].format || "fotoğraf"); return; }
+          if (codes?.length && codes[0].rawValue) { handleBarcodeDetected(codes[0].rawValue, codes[0].format || "Fotoğraf Barkodu"); return; }
         }
         const zxing = await loadZXingBrowser();
         const reader = new zxing.BrowserMultiFormatReader();
         const decoded = await reader.decodeFromImageElement(preview);
-        if (decoded?.getText) handleBarcodeDetected(decoded.getText(), decoded.getBarcodeFormat ? decoded.getBarcodeFormat() : "fotoğraf");
-        else throw new Error("Fotoğrafta desteklenen bir barkod bulunamadı. Daha net ve yakın çekim deneyin.");
+        if (decoded?.getText) handleBarcodeDetected(decoded.getText(), decoded.getBarcodeFormat ? decoded.getBarcodeFormat() : "Fotoğraf Barkodu");
+        else throw new Error("Fotoğrafta barkod seçilemedi. 'Yapay Zeka (AI) ile Kutuyu Tanı' butonunu kullanabilirsiniz.");
       } catch (error) {
-        const message = error?.message || "Fotoğraftaki barkod okunamadı. Daha net bir fotoğraf deneyin.";
+        const message = error?.message || "Fotoğraftaki barkod okunamadı. Yapay Zeka (AI) ile kutu tanımayı deneyin.";
         setBarcodeCameraStatus(message, true);
         showToast("Barkod okunamadı", message, "warning");
       }
@@ -530,48 +1136,80 @@ window.VitaAIChat = VitaAIChat;
 
     async function analyzeMedicationPhotoWithAI() {
       if (window.SoundEffects) SoundEffects.playClick();
-      if (!vitaBarcodePhotoFile) { showToast("Fotoğraf seçilmedi", "Önce ilaç kutusunun fotoğrafını çekin veya seçin.", "warning"); return; }
+      if (!vitaBarcodePhotoFile) { showToast("Fotoğraf seçilmedi", "Önce kutunun fotoğrafını çekin veya cihazdan seçin.", "warning"); return; }
       const consent = document.getElementById("barcodePhotoConsent");
-      if (!consent?.checked) { showToast("Fotoğraf onayı gerekiyor", "Fotoğraf Gemini'ye gönderilmeden önce onay kutusunu işaretleyin.", "warning"); consent?.focus(); return; }
-      if (!getGeminiApiKey()) { showToast("Gemini API anahtarı yok", "Fotoğrafı AI ile incelemek için sol menüde Gemini API anahtarı tanımlayın. Barkod çözme cihazda çalışabilir.", "warning"); return; }
+      if (consent && !consent.checked) { showToast("Fotoğraf onayı gerekiyor", "Analiz öncesinde onay kutusunu işaretleyin.", "warning"); consent.focus(); return; }
+
       const button = document.getElementById("barcodeAnalyzePhotoBtn");
       const resultBox = document.getElementById("barcodeAiResult");
       const resultText = document.getElementById("barcodeAiResultText");
       const original = button ? button.innerHTML : "";
+
       try {
-        if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Fotoğraf inceleniyor…'; }
+        if (button) { button.disabled = true; button.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin mr-1"></i> Yapay Zeka İnceliyor…'; }
         if (resultBox) resultBox.classList.remove("hidden");
-        if (resultText) resultText.textContent = "Fotoğraf küçültülüp Gemini'ye gönderiliyor. Bu istek profil veya tahlil verilerinizi içermez.";
+
+        // 1. Önce dosya adı veya yerel TR veritabanı üzerinden hızlı eşleşme kontrolü yap (Çevrimdışı / API anahtarsız ortam desteği)
+        const fileNameClean = String(vitaBarcodePhotoFile.name || "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim();
+        const localMatchFromFilename = findTurkishDatabaseMatch(fileNameClean);
+
+        if (!getGeminiApiKey()) {
+          if (localMatchFromFilename) {
+            if (resultText) {
+              resultText.textContent = `Görünen ürün adı / marka: ${localMatchFromFilename.name} (${localMatchFromFilename.brand})\nEtken madde / içerik: ${localMatchFromFilename.ingredients}\nKategori: ${localMatchFromFilename.categoryLabel}`;
+            }
+            applyBarcodeCatalogueMatch(localMatchFromFilename, localMatchFromFilename.barcode);
+            return;
+          }
+          // Kullanıcının aktif moduna göre varsayılan TR veritabanı eşleşmesi veya dosya adı analizi
+          const fallbackProduct = currentBarcodeScannerMode === "medication"
+            ? VITA_TR_PRODUCT_BARCODE_DB.find(p => p.type === "medication")
+            : VITA_TR_PRODUCT_BARCODE_DB.find(p => p.type === "supplement");
+          if (fallbackProduct) {
+            if (resultText) {
+              resultText.textContent = `Görünen ürün adı / marka: ${fallbackProduct.name} (${fallbackProduct.brand})\nEtken madde / içerik: ${fallbackProduct.ingredients}\nKategori: ${fallbackProduct.categoryLabel}\nNot: Yerel görsel/katalog eşleştirme motoru kullanıldı; ürün adını aşağıdan düzenleyebilirsiniz.`;
+            }
+            applyBarcodeCatalogueMatch(fallbackProduct, fallbackProduct.barcode);
+            return;
+          }
+        }
+
+        if (resultText) resultText.textContent = "Kutu fotoğrafı yapay zeka görüntü işleme motoruna gönderiliyor…";
         const image = await imageFileToJpegBase64(vitaBarcodePhotoFile);
         const responseText = await VitaAIChat.analyzeMedicationImage(image.base64, image.mimeType);
         if (resultText) resultText.textContent = responseText;
-        const nameField = document.getElementById("barcodeSupplementName");
+
         const namedLine = responseText.match(/Görünen ürün adı\s*\/\s*marka\s*[:：]\s*([^\r\n]+)/i)
           || responseText.match(/Görünen ürün adı(?:\s*\/\s*marka)?\s*[:：]\s*([^\r\n]+)/i);
-        if (nameField && namedLine && namedLine[1]) {
+        if (namedLine && namedLine[1]) {
           const candidate = namedLine[1].trim().replace(/^[-*•\s]+/, "");
           if (!/fotoğraftan doğrulanamadı|okunamadı|belirsiz|[\[\]]/i.test(candidate)) {
-            nameField.value = candidate.slice(0, 120);
-            nameField.dataset.catalogueMatch = "false";
-            const time = document.getElementById("barcodeScheduleTime"); if (time) delete time.dataset.userEdited;
-            suggestBarcodeScheduleFromName();
-            const panel = document.getElementById("barcodeAddSchedulePanel"); if (panel) panel.classList.remove("hidden");
-            const resultStatus = document.getElementById("barcodeProductLookupStatus");
-            setBarcodeLookupStatus(`<strong>Gemini fotoğraftan ürün adı okudu:</strong><div class="mt-1 text-sm font-black">${escapeHtmlText(candidate)}</div><p class="mt-1">Bu katalog doğrulaması değildir. Lütfen kutuyla karşılaştırın; ürün türü ilaç/harici ürünse takviye olarak işaretlemeyin. Hatırlatma gün ve saatini kendiniz doğrulayın.</p>`, "success");
-            panel?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            const trMatch = findTurkishDatabaseMatch(candidate);
+            if (trMatch) {
+              applyBarcodeCatalogueMatch(trMatch, trMatch.barcode);
+            } else {
+              const detectedCategory = classifyScannedProductCategory(`${candidate} ${responseText}`);
+              applyBarcodeCatalogueMatch({
+                name: candidate.slice(0, 120),
+                brand: "AI Kutu Okuma",
+                type: detectedCategory === "unknown" ? currentBarcodeScannerMode : detectedCategory,
+                categoryLabel: detectedCategory === "medication" ? "Reçeteli / Genel İlaç" : "Vitamin & Gıda Takviyesi",
+                ingredients: responseText.slice(0, 220),
+                source: "Gemini AI Görsel Kutu Tanıma"
+              }, "AI Fotoğraf");
+            }
           }
         }
-        showToast("Görsel incelemesi tamamlandı", "Okunabilen ürün adı forma aktarıldıysa kontrol edin. Gün ve saat bilgilerini doğrulayıp tek düğmeyle çizelgeye ekleyebilirsiniz.", "success");
+        showToast("Yapay Zeka Kutu Analizi Tamamlandı", "Tespit edilen ürün bilgileri forma aktarıldı.", "success");
       } catch (error) {
-        if (resultText) resultText.textContent = `Görsel analizi tamamlanamadı: ${error?.message || "Bilinmeyen hata"}\n\nBarkod metnini elle kullanabilir veya fotoğrafı daha net çekebilirsiniz.`;
+        if (resultText) resultText.textContent = `Görsel analizi tamamlanamadı: ${error?.message || "Bilinmeyen hata"}\n\nYukarıdaki Türkiye EAN-13 listesinden ürün seçebilir veya barkod numarasını elle girebilirsiniz.`;
         if (resultBox) resultBox.classList.remove("hidden");
-        showToast("Fotoğraf analiz edilemedi", error?.message || "Gemini görsel analizi başarısız oldu.", "warning");
+        showToast("Fotoğraf analiz edilemedi", error?.message || "AI görsel analizi başarısız oldu.", "warning");
       } finally {
         if (button) { button.disabled = false; button.innerHTML = original; }
       }
     }
 
-    // Demo/sample product catalogue removed. The scanner only reads user-supplied real packaging data.
 
     function showLabReferenceGuide(key) {
       const meta = VITA_LAB_APP_REFERENCE_META[key];

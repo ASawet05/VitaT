@@ -1,15 +1,406 @@
-function runCDSSAnalysis() {
-      const btn = document.getElementById("btnRunCDSS");
-      if (btn) btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Anamnez Triyajı & eGFR Analiz Ediliyor...</span>`;
+/* ==========================================================================
+   GÖREV 2: "NEYİM VAR?" BÖLÜMÜNDEKİ [ANAMNEZ TRİYAJ VE eGFR ANALİZ] MOTORU
+   - Belirtileri (state.selectedSymptoms), Yaş, Cinsiyet ve Kreatinin değerlerini toplar
+   - CKD-EPI (2021) eGFR formülünü hesaplar
+   - Triyaj seviyesini (ACİL DEĞERLENDİRME / POLİKLİNİK BAŞVURUSU / EVDE TAKİP) belirler
+   - Sonucu doğrudan #view-neyim içindeki #neyimTriageEgfrResultContainer alanına basar
+   - Eksik/hatalı veri durumunda konsola düşmek yerine #neyimTriageErrorBanner ile uyarı gösterir
+   ========================================================================== */
+function hydrateNeyimInlineInputsFromState() {
+  const p = state.user || defaultUserProfile;
+  const ageEl = document.getElementById("neyimInputAge");
+  const genderEl = document.getElementById("neyimInputGender");
+  const creatEl = document.getElementById("neyimInputCreatinine");
+  const labCtx = window.VitaLabInsights ? VitaLabInsights.cdssInputs() : null;
+  const labs = labCtx ? labCtx.values : (state.labValues || {});
 
-      setTimeout(() => {
-        executeCDSSRules();
-        navigateToView("view-clinical-results");
-        if (btn) btn.innerHTML = `<i class="fa-solid fa-microchip"></i> <span>Ön değerlendirmeyi başlat</span>`;
-        if (window.SoundEffects) SoundEffects.playSuccess();
-        showToast("Analiz Tamamlandı", "Bulgular doktor değerlendirme raporu için düzenlendi; otomatik doz veya tedavi kararı verilmedi.", "success");
-      }, 300);
+  if (ageEl && (!ageEl.value || ageEl.dataset.userEdited !== "true")) {
+    ageEl.value = p.age ? String(p.age) : "28";
+  }
+  if (genderEl && genderEl.dataset.userEdited !== "true") {
+    genderEl.value = p.gender === "E" ? "E" : "K";
+  }
+  if (creatEl && (!creatEl.value || creatEl.dataset.userEdited !== "true")) {
+    const cr = labs.creatinine ?? state.labValues?.creatinine;
+    if (cr !== null && cr !== undefined && cr !== "" && Number.isFinite(Number(cr))) {
+      creatEl.value = String(cr);
     }
+  }
+  syncNeyimInlineInputsPreview(false);
+}
+
+function syncNeyimInlineInputsPreview(markUserEdited = true) {
+  const ageEl = document.getElementById("neyimInputAge");
+  const genderEl = document.getElementById("neyimInputGender");
+  const creatEl = document.getElementById("neyimInputCreatinine");
+  const badgeEl = document.getElementById("neyimLiveEgfrPreviewBadge");
+  if (markUserEdited && document.activeElement) {
+    if (document.activeElement === ageEl && ageEl) ageEl.dataset.userEdited = "true";
+    if (document.activeElement === genderEl && genderEl) genderEl.dataset.userEdited = "true";
+    if (document.activeElement === creatEl && creatEl) creatEl.dataset.userEdited = "true";
+  }
+  const age = Number(ageEl?.value || state.user?.age || 28);
+  const gender = String(genderEl?.value || state.user?.gender || "K");
+  const rawCr = creatEl?.value !== undefined && creatEl?.value !== "" ? Number(String(creatEl.value).replace(",", ".")) : null;
+
+  if (badgeEl) {
+    if (rawCr !== null && Number.isFinite(rawCr) && rawCr > 0 && age >= 18) {
+      const egfrObj = calculateCKDEPI_eGFR(rawCr, age, gender);
+      if (egfrObj) {
+        badgeEl.textContent = `Canlı eGFR: ${egfrObj.egfr} mL/dk (${egfrObj.stageCode})`;
+        badgeEl.className = `text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${egfrObj.badgeClass}`;
+        return;
+      }
+    }
+    badgeEl.textContent = age < 18 ? "18 Yaş Altı (Pediatrik)" : "CKD-EPI 2021 Hazır";
+    badgeEl.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-white text-teal-800 border border-teal-200";
+  }
+}
+
+function showNeyimTriageValidationError(title, detail) {
+  const errBanner = document.getElementById("neyimTriageErrorBanner");
+  if (errBanner) {
+    errBanner.classList.remove("hidden");
+    errBanner.innerHTML = `
+      <div class="flex items-start gap-2.5">
+        <i class="fa-solid fa-triangle-exclamation text-rose-600 text-base mt-0.5"></i>
+        <div class="space-y-1">
+          <div class="font-black text-rose-900">${escapeHtmlText(title)}</div>
+          <p class="text-[11px] leading-relaxed text-rose-800">${escapeHtmlText(detail)}</p>
+        </div>
+      </div>`;
+    errBanner.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  if (typeof showToast === "function") {
+    showToast(title, detail, "warning");
+  }
+}
+
+function evaluateAnamnesisTriageAndEgfr({ symptomsList, age, gender, creatinine, labs }) {
+  const urgentSymptoms = [
+    { key: "balance_difficulty", label: "Denge ve yürüme güçlüğü (Ataksi / Nörolojik bulgu)" },
+    { key: "unexplained_swelling", label: "Bacak veya ayak bileğinde açıklanamayan şişlik (Ödem)" },
+    { key: "dark_nail_change", label: "Tırnakta yeni/genişleyen koyu çizgi (Pigmente lezyon)" },
+    { key: "orthostatic_dizziness", label: "Ayağa kalkınca göz kararması ve baş dönmesi" },
+    { key: "lip_twitching", label: "Dudak çevresinde veya parmak uçlarında kasılma/tetani eğilimi" },
+    { key: "night_blindness", label: "Alacakaranlıkta / gece görme güçlüğü" }
+  ];
+  const outpatientSymptoms = [
+    { key: "numbness", label: "El ve ayaklarda uyuşma, karıncalanma (Periferik nöropati)" },
+    { key: "burning_tongue", label: "Dilde yanma ve kızarıklık (Glossit)" },
+    { key: "pica_craving", label: "Buz, toprak veya kahve telvesi yeme isteği (Pika)" },
+    { key: "spoon_nails", label: "Kaşık tırnak deformitesi (Koilonişi)" },
+    { key: "bone_pain", label: "Derin kemik ve bel/kalça sızlaması" },
+    { key: "muscle_weakness", label: "Merdiven çıkarken kas güçsüzlüğü" },
+    { key: "frequent_infection", label: "Sık tekrarlayan enfeksiyonlar" },
+    { key: "bleeding_gums", label: "Diş eti kanaması" },
+    { key: "easy_bruising", label: "Kolay morarma / ekimoz" },
+    { key: "angular_cheilitis", label: "Ağız kenarında çatlak ve yarıklar (Açısal keilit)" }
+  ];
+
+  const egfrResult = (age >= 18 && creatinine !== null && Number.isFinite(creatinine) && creatinine > 0)
+    ? calculateCKDEPI_eGFR(creatinine, age, gender)
+    : null;
+
+  const matchedUrgent = urgentSymptoms.filter(item => symptomsList.includes(item.key));
+  const matchedOutpatient = outpatientSymptoms.filter(item => symptomsList.includes(item.key));
+  const hasHeadacheAndTremor = symptomsList.includes("headache") && symptomsList.includes("hand_tremor");
+
+  let triageLevel = "EVDE TAKİP & KORUYUCU İZLEM";
+  let triageCode = "home_follow";
+  let triageBadgeClass = "bg-emerald-100 text-emerald-900 border-emerald-300";
+  let triageCardBorder = "border-emerald-400 bg-emerald-50/40";
+  let triageIcon = "fa-house-medical-circle-check text-emerald-600";
+  let triageSummary = "Seçilen belirtilerde akut kırmızı bayrak saptanmadı. Beslenme, uyku, hidrasyon ve mevcut tahlillerinizle koruyucu takip önerilir; şikayetleriniz sürerse aile hekiminize danışınız.";
+  const triageReasons = [];
+
+  if (egfrResult && egfrResult.egfr < 30) {
+    triageLevel = "ACİL / ÖNCELİKLİ NEFROLOJİ & HEKİM DEĞERLENDİRMESİ";
+    triageCode = "urgent";
+    triageBadgeClass = "bg-rose-100 text-rose-900 border-rose-300";
+    triageCardBorder = "border-rose-400 bg-rose-50/50";
+    triageIcon = "fa-truck-medical text-rose-600";
+    triageReasons.push(`Hesaplanan CKD-EPI eGFR değeri ${egfrResult.egfr} mL/dk/1.73m² (${egfrResult.stageCode} - ${egfrResult.stageName}) düzeyindedir; nefrotoksik ilaç ve kontrolsüz takviyelerden kaçınılmalı, derhal hekime başvurulmalıdır.`);
+  }
+
+  if (hasHeadacheAndTremor) {
+    triageReasons.push("Baş ağrısı ve el titremesi birlikte bildirilmiştir; nörolojik muayene ve tansiyon kontrolü gerektirir.");
+  }
+
+  if (matchedUrgent.length > 0 || (egfrResult && egfrResult.egfr < 30) || (hasHeadacheAndTremor && matchedUrgent.length > 0)) {
+    if (matchedUrgent.length >= 2 || (egfrResult && egfrResult.egfr < 30) || symptomsList.includes("balance_difficulty") || symptomsList.includes("unexplained_swelling")) {
+      triageLevel = "ACİL / ÖNCELİKLİ HEKİM DEĞERLENDİRMESİ";
+      triageCode = "urgent";
+      triageBadgeClass = "bg-rose-100 text-rose-900 border-rose-300";
+      triageCardBorder = "border-rose-400 bg-rose-50/50";
+      triageIcon = "fa-triangle-exclamation text-rose-600";
+      matchedUrgent.forEach(u => triageReasons.push(`Kırmızı bayraklı belirti: ${u.label}`));
+      triageSummary = "Seçtiğiniz belirtiler ve/veya böbrek fonksiyon (eGFR) parametreniz tek başına vitamin eksikliğiyle açıklanamayacak öncelikli değerlendirme bulguları içeriyor. Kendi kendinize takviye başlamadan önce hekim muayenesi önerilir.";
+    } else {
+      triageLevel = "POLİKLİNİK BAŞVURUSU (DAHİLİYE / AİLE HEKİMLİĞİ)";
+      triageCode = "outpatient";
+      triageBadgeClass = "bg-amber-100 text-amber-900 border-amber-300";
+      triageCardBorder = "border-amber-400 bg-amber-50/50";
+      triageIcon = "fa-user-doctor text-amber-600";
+      matchedUrgent.forEach(u => triageReasons.push(`Hekim değerlendirmesi gerektiren belirti: ${u.label}`));
+      triageSummary = "Bildirdiğiniz belirtiler hedefli kan tahlili ve poliklinik değerlendirmesi gerektiriyor.";
+    }
+  } else if (
+    matchedOutpatient.length > 0 ||
+    hasHeadacheAndTremor ||
+    symptomsList.length >= 2 ||
+    (egfrResult && egfrResult.egfr < 60)
+  ) {
+    triageLevel = "POLİKLİNİK BAŞVURUSU (DAHİLİYE / AİLE HEKİMLİĞİ)";
+    triageCode = "outpatient";
+    triageBadgeClass = "bg-amber-100 text-amber-900 border-amber-300";
+    triageCardBorder = "border-amber-400 bg-amber-50/50";
+    triageIcon = "fa-user-doctor text-amber-600";
+    if (egfrResult && egfrResult.egfr < 60) {
+      triageReasons.push(`Hesaplanan CKD-EPI eGFR değeri ${egfrResult.egfr} mL/dk/1.73m² (${egfrResult.stageCode}) ile <60 sınırının altındadır; hekim kontrolü önerilir.`);
+    }
+    matchedOutpatient.slice(0, 4).forEach(o => triageReasons.push(`Klinik ilişkili belirti: ${o.label}`));
+    triageSummary = "Seçilen belirtiler ve/veya eGFR sonucunuz mikrobesin eksikliği veya metabolik etkilenme açısından poliklinik kontrolü ve laboratuvar doğrulamasıyla uyumludur.";
+  } else if (symptomsList.length === 1) {
+    const key = symptomsList[0];
+    const meta = (typeof ANAMNESIS_DICTIONARY !== "undefined" && ANAMNESIS_DICTIONARY[key]) ? ANAMNESIS_DICTIONARY[key] : null;
+    triageReasons.push(`Seçilen tekil belirti: ${meta ? meta.symptomName : key}`);
+    triageSummary = "Tekil ve hafif düzeyli belirti kaydı mevcut. Şikayetiniz 2 haftadan uzun sürerse veya şiddetlenirse poliklinik başvurusu önerilir.";
+  } else {
+    triageReasons.push("Aktif belirti seçimi yapılmadı; profil ve laboratuvar parametreleri üzerinden bazal değerlendirme yapıldı.");
+  }
+
+  return {
+    triageLevel,
+    triageCode,
+    triageBadgeClass,
+    triageCardBorder,
+    triageIcon,
+    triageSummary,
+    triageReasons,
+    egfrResult,
+    symptomCount: symptomsList.length
+  };
+}
+
+function renderNeyimInlineTriageResult(resultData, { age, gender, creatinine, symptomsList }) {
+  const container = document.getElementById("neyimTriageEgfrResultContainer");
+  if (!container) return;
+
+  const symptomBadgesHtml = symptomsList.length > 0
+    ? symptomsList.map(key => {
+        const meta = (typeof ANAMNESIS_DICTIONARY !== "undefined" && ANAMNESIS_DICTIONARY[key]) ? ANAMNESIS_DICTIONARY[key] : null;
+        const name = meta ? meta.symptomName : key;
+        return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-navy-900 border border-slate-200 text-[11px] font-bold"><i class="fa-solid fa-check text-teal-600 text-[10px]"></i>${escapeHtmlText(name)}</span>`;
+      }).join("")
+    : `<span class="text-xs text-slate-500 italic">Seçili belirti yok (Yalnızca biyometrik &amp; eGFR değerlendirmesi)</span>`;
+
+  const egfrCardHtml = resultData.egfrResult
+    ? `<div class="p-3.5 rounded-xl border ${resultData.egfrResult.badgeClass} space-y-1.5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="text-xs font-black flex items-center gap-1.5"><i class="fa-solid fa-kidneys"></i> CKD-EPI (2021) eGFR Sonucu</span>
+          <span class="text-xs font-black px-2.5 py-0.5 rounded-full bg-white/80 border">${resultData.egfrResult.egfr} mL/dk/1.73m² • Evre ${escapeHtmlText(resultData.egfrResult.stageCode)}</span>
+        </div>
+        <p class="text-[11px] font-bold">${escapeHtmlText(resultData.egfrResult.stageName)} (Kreatinin: ${creatinine} mg/dL · Yaş: ${age} · Cinsiyet: ${gender === "E" ? "Erkek" : "Kadın"})</p>
+        <p class="text-[11px] leading-relaxed">${escapeHtmlText(resultData.egfrResult.clinicalNote)}</p>
+      </div>`
+    : `<div class="p-3.5 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-700 space-y-1">
+        <div class="font-black text-navy-900 flex items-center gap-1.5"><i class="fa-solid fa-kidneys text-teal-600"></i> CKD-EPI eGFR Hesaplaması</div>
+        <p class="text-[11px] leading-relaxed">${age < 18
+          ? "18 yaş altı kullanıcılarda yetişkin CKD-EPI 2021 formülü uygulanmaz; pediatrik Schwartz formülü için uzman hekim değerlendirmesi gerekir."
+          : "Serum kreatinin değeri girilmediği için sayısal eGFR hesaplanmadı. Yukarıdaki 'Serum Kreatinin (mg/dL)' kutusuna değer girerek (Örn: 0.85) anında CKD-EPI eGFR evrenizi görebilirsiniz."}</p>
+      </div>`;
+
+  const reasonsHtml = resultData.triageReasons.map(r => `<li class="flex items-start gap-2 text-xs text-slate-700"><i class="fa-solid fa-circle-dot text-teal-600 text-[10px] mt-1 shrink-0"></i><span>${escapeHtmlText(r)}</span></li>`).join("");
+
+  container.classList.remove("hidden");
+  container.innerHTML = `
+    <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200">
+      <div class="flex items-center gap-2.5">
+        <span class="w-9 h-9 rounded-xl bg-navy-900 text-teal-300 flex items-center justify-center text-base shadow-xs">
+          <i class="fa-solid ${resultData.triageIcon}"></i>
+        </span>
+        <div>
+          <span class="text-[10px] font-black uppercase tracking-wider text-slate-500 block">Anamnez Triyaj &amp; Böbrek Fonksiyon Raporu</span>
+          <h3 class="text-sm sm:text-base font-black text-navy-900">${escapeHtmlText(resultData.triageLevel)}</h3>
+        </div>
+      </div>
+      <span class="text-xs font-black px-3 py-1 rounded-full border ${resultData.triageBadgeClass}">
+        ${resultData.symptomCount} Belirti Analiz Edildi
+      </span>
+    </div>
+
+    <div class="p-3.5 rounded-xl border ${resultData.triageCardBorder} space-y-2">
+      <p class="text-xs font-bold text-navy-900 leading-relaxed">${escapeHtmlText(resultData.triageSummary)}</p>
+      <ul class="space-y-1 pt-1">${reasonsHtml}</ul>
+    </div>
+
+    ${egfrCardHtml}
+
+    <div class="space-y-1.5">
+      <span class="text-[11px] font-black text-slate-600 uppercase tracking-wider block">Değerlendirilen Belirtiler (${resultData.symptomCount})</span>
+      <div class="flex flex-wrap gap-1.5">${symptomBadgesHtml}</div>
+    </div>
+
+    <div class="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+      <span class="text-[11px] text-slate-500">
+        <i class="fa-solid fa-circle-info text-teal-600 mr-1"></i>Klinik karar destek motoru tüm bulgularınızı ayrıntılı rapor ve klinik analiz ekranına da işledi.
+      </span>
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); navigateToView('view-clinical-results')" class="px-4 py-2 rounded-xl bg-navy-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5">
+          <i class="fa-solid fa-chart-line text-teal-300"></i>
+          <span>Ayrıntılı Klinik Analiz Sayfasını Aç</span>
+        </button>
+        <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); transferToDoctorReport()" class="px-3.5 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-300 text-xs font-bold transition cursor-pointer flex items-center gap-1.5">
+          <i class="fa-solid fa-file-medical"></i>
+          <span>Hekim Raporuna Aktar</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function runCDSSAnalysis() {
+  const errBanner = document.getElementById("neyimTriageErrorBanner");
+  if (errBanner) {
+    errBanner.classList.add("hidden");
+    errBanner.innerHTML = "";
+  }
+
+  try {
+    if (!state.user) {
+      state.user = { ...defaultUserProfile };
+    }
+    const ageEl = document.getElementById("neyimInputAge");
+    const genderEl = document.getElementById("neyimInputGender");
+    const creatEl = document.getElementById("neyimInputCreatinine");
+
+    const rawAgeStr = ageEl && String(ageEl.value || "").trim() !== "" ? String(ageEl.value).trim() : String(state.user.age || 28);
+    const parsedAge = Number(rawAgeStr);
+    if (!Number.isFinite(parsedAge) || parsedAge < 1 || parsedAge > 110) {
+      showNeyimTriageValidationError(
+        "Geçersiz Yaş Değeri",
+        "CKD-EPI eGFR ve klinik triyaj hesaplaması için lütfen 1 ile 110 arasında geçerli bir yaş değeri girin."
+      );
+      ageEl?.focus();
+      return;
+    }
+
+    const parsedGender = (genderEl && (genderEl.value === "E" || genderEl.value === "K"))
+      ? genderEl.value
+      : (state.user.gender === "E" ? "E" : "K");
+
+    let parsedCreatinine = null;
+    const rawCreatStr = creatEl ? String(creatEl.value || "").trim().replace(",", ".") : "";
+    if (rawCreatStr !== "") {
+      const crNum = Number(rawCreatStr);
+      if (!Number.isFinite(crNum) || crNum <= 0 || crNum > 25) {
+        showNeyimTriageValidationError(
+          "Geçersiz Serum Kreatinin Değeri",
+          "Serum kreatinin değeri 0.1 ile 25.0 mg/dL arasında sayısal bir değer olmalıdır (Örn: 0.85). Bilmiyorsanız alanı boş bırakabilirsiniz."
+        );
+        creatEl?.focus();
+        return;
+      }
+      parsedCreatinine = crNum;
+    } else if (state.labValues?.creatinine !== null && state.labValues?.creatinine !== undefined && state.labValues?.creatinine !== "") {
+      const fallbackCr = Number(state.labValues.creatinine);
+      if (Number.isFinite(fallbackCr) && fallbackCr > 0) parsedCreatinine = fallbackCr;
+    }
+
+    // Kullanıcı girdilerini state ile senkronize et
+    state.user.age = parsedAge;
+    state.user.gender = parsedGender;
+    if (parsedCreatinine !== null) {
+      if (!state.labValues) state.labValues = {};
+      state.labValues.creatinine = parsedCreatinine;
+      const labCreatInput = document.getElementById("inputLabCreatinine");
+      if (labCreatInput && !labCreatInput.value) labCreatInput.value = String(parsedCreatinine);
+    }
+
+    const symptomsList = Array.from(state.selectedSymptoms || []);
+    if (symptomsList.length === 0 && parsedCreatinine === null) {
+      showNeyimTriageValidationError(
+        "Belirti veya Kreatinin Değeri Seçilmedi",
+        "Anamnez Triyaj ve eGFR Analizi için lütfen listeden en az bir belirti seçin veya Serum Kreatinin (mg/dL) değerinizi girin."
+      );
+      return;
+    }
+
+    const btn = document.getElementById("btnRunCDSS");
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Anamnez Triyajı &amp; eGFR Hesaplanıyor...</span>`;
+    }
+
+    // Tam CDSS motorunu çalıştır
+    executeCDSSRules();
+
+    // NeyimVar sayfası içi anlık Triyaj ve eGFR kartını oluştur ve göster
+    const labCtx = window.VitaLabInsights ? VitaLabInsights.cdssInputs() : null;
+    const labs = labCtx ? labCtx.values : (state.labValues || {});
+    const triageData = evaluateAnamnesisTriageAndEgfr({
+      symptomsList,
+      age: parsedAge,
+      gender: parsedGender,
+      creatinine: parsedCreatinine,
+      labs
+    });
+    renderNeyimInlineTriageResult(triageData, {
+      age: parsedAge,
+      gender: parsedGender,
+      creatinine: parsedCreatinine,
+      symptomsList
+    });
+    syncNeyimInlineInputsPreview(false);
+
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-microchip"></i> <span>Anamnez Triyaj ve eGFR Analiz</span>`;
+    }
+    if (window.SoundEffects) SoundEffects.playSuccess();
+
+    const inlineContainer = document.getElementById("neyimTriageEgfrResultContainer");
+    if (inlineContainer && !document.getElementById("view-neyim")?.classList.contains("hidden")) {
+      inlineContainer.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } else {
+      navigateToView("view-clinical-results");
+    }
+
+    showToast(
+      "Triyaj ve eGFR Analizi Tamamlandı",
+      `${triageData.triageLevel}${triageData.egfrResult ? ` · eGFR: ${triageData.egfrResult.egfr} mL/dk (${triageData.egfrResult.stageCode})` : ""}`,
+      "success"
+    );
+  } catch (err) {
+    console.error("Anamnez Triyaj ve eGFR Analiz hatası:", err);
+    const btn = document.getElementById("btnRunCDSS");
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-microchip"></i> <span>Anamnez Triyaj ve eGFR Analiz</span>`;
+    }
+    showNeyimTriageValidationError(
+      "Analiz Sırasında Beklenmeyen Bir Durum Oluştu",
+      err?.message || "Lütfen girdiğiniz yaş, cinsiyet ve kreatinin değerlerini kontrol edip tekrar deneyin."
+    );
+  }
+}
+
+// DOM hazır olduğunda #btnRunCDSS ve #view-neyim girdilerini güvenli şekilde bağla
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("btnRunCDSS");
+  if (btn && !btn.dataset.cdssListenerBound) {
+    btn.dataset.cdssListenerBound = "true";
+    btn.removeAttribute("onclick");
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (window.SoundEffects) SoundEffects.playClick();
+      runCDSSAnalysis();
+    });
+  }
+  hydrateNeyimInlineInputsFromState();
+});
+
 
     function executeCDSSRules() {
       const p = state.user || defaultUserProfile;

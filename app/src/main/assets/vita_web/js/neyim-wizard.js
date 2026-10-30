@@ -88,10 +88,10 @@
       if(backButton)backButton.disabled=index===0;
       if(nextButton)nextButton.hidden=index===categories.length-1;
       if(stepHint)stepHint.textContent=index===categories.length-1
-        ?'Son adım. Ön değerlendirmeyi başlatmak için aşağıdaki düğmeyi kullanın.'
-        :'Bu adımı boş bırakıp devam edebilirsiniz.';
-      if(analysisRow)analysisRow.classList.toggle('hidden',index!==categories.length-1);
-      root.classList.toggle('vita-analysis-locked',index!==categories.length-1);
+        ?'Son adım. Anamnez Triyaj ve eGFR Analiz butonuna tıklayarak sonucu hemen görüntüleyebilirsiniz.'
+        :'Bu adımı boş bırakıp devam edebilir veya istediğiniz anda aşağıdaki Anamnez Triyaj ve eGFR Analiz butonuna basabilirsiniz.';
+      if(analysisRow)analysisRow.classList.remove('hidden');
+      root.classList.remove('vita-analysis-locked');
       if(panel){
         panel.setAttribute('role','region');
         panel.setAttribute('aria-label',`Adım ${index+1}: ${categoryNames[index]}`);

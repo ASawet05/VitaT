@@ -29,7 +29,7 @@ function applyParsedPdfValues() {
       });
 
       if (state.labValues.creatinine !== null && state.labValues.creatinine !== undefined) {
-        const egfrCrInput = document.getElementById("vitaEgfrCr");
+        const egfrCrInput = document.getElementById("vitaEgfrCreatinine") || document.getElementById("vitaEgfrCr");
         if (egfrCrInput) egfrCrInput.value = String(state.labValues.creatinine);
       }
 

@@ -36,8 +36,6 @@ function renderDailyTab() {
       const taken = todaySupplements.filter(i => i.taken).length;
       const vitaScore = total > 0 ? Math.round((taken / total) * 70 + Math.min(1, state.hydration.current / state.hydration.target) * 30) : Math.round(Math.min(1, state.hydration.current / state.hydration.target) * 100);
 
-      const headerVitaEl = document.getElementById("headerVitaSkor");
-      if (headerVitaEl) headerVitaEl.textContent = `${vitaScore}%`;
       const dashVitaEl = document.getElementById("dashVitaSkor");
       if (dashVitaEl) dashVitaEl.textContent = `${vitaScore}%`;
 

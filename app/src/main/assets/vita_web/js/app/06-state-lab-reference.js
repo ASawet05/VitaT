@@ -212,6 +212,11 @@ let currentAuthMode = "login";
       const doseNote = String(doseEl?.value || "").trim();
       const scheduleDays = Array.from(document.querySelectorAll('input[name="barcodeScheduleDay"]:checked')).map(input => Number(input.value)).filter(Number.isInteger);
       if (!name) { showToast("Ürün adı gerekli", "Kutu üzerindeki ürün adını doğrulayıp girin; barkod numarası tek başına ürün adını belirlemez.", "warning"); nameEl?.focus(); return; }
+      if (typeof classifyScannedProductCategory === "function" && classifyScannedProductCategory(name) === "medication") {
+        showToast("Takviye Filtresi Kısıtlaması", "Bu alanda yalnızca vitaminler ve gıda takviyeleri eklenebilir. Reçeteli ilaçları 'İlaç Seç ve Denetle' modülünden denetleyebilirsiniz.", "warning");
+        if (typeof switchBarcodeScannerMode === "function") switchBarcodeScannerMode("medication");
+        return;
+      }
       if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(scheduleTime)) { showToast("Saat geçersiz", "Lütfen geçerli bir saat seçin.", "warning"); timeEl?.focus(); return; }
       if (!scheduleDays.length) { showToast("Gün seçilmedi", "Takviyenin çizelgede görünmesi için en az bir gün seçin.", "warning"); return; }
       if (barcode && state.supplements.some(item => String(item.barcode || "") === barcode)) {
@@ -648,33 +653,69 @@ let currentAuthMode = "login";
       const headerIcon = document.getElementById("headerCloudSyncIcon");
       const headerLabel = document.getElementById("headerCloudSyncLabel");
       const headerSublabel = document.getElementById("headerCloudSyncSublabel");
+      const profileCard = document.getElementById("profileMenuCloudStatusCard");
+      const profileIconBox = document.getElementById("profileMenuCloudIconBox");
+      const profileIcon = document.getElementById("profileMenuCloudIcon");
+      const profilePill = document.getElementById("profileMenuCloudPill");
+      const profilePing = document.getElementById("profileMenuCloudPing");
       const profileDot = document.getElementById("profileMenuCloudSyncDot");
-      if (!headerBtn) return;
+      const profileBarFill = document.getElementById("profileMenuCloudBarFill");
+      const profileMetaText = document.getElementById("profileMenuCloudMetaText");
+      const profilePercentBadge = document.getElementById("profileMenuCloudPercentBadge");
+      if (!headerBtn && !profileCard) return;
 
       const acc = getLinkedGoogleCloudAccount();
       const connected = Boolean(acc && acc.connected && acc.email);
 
-      headerBtn.classList.remove(
-        "vita-cloud-btn-syncing",
-        "vita-cloud-btn-synced",
-        "vita-cloud-btn-connected",
-        "vita-cloud-btn-local"
-      );
+      if (headerBtn) {
+        headerBtn.classList.remove(
+          "vita-cloud-btn-syncing",
+          "vita-cloud-btn-synced",
+          "vita-cloud-btn-connected",
+          "vita-cloud-btn-local"
+        );
+      }
+      if (profileCard) {
+        profileCard.classList.remove(
+          "vita-profile-cloud-syncing",
+          "vita-profile-cloud-synced",
+          "vita-profile-cloud-connected",
+          "vita-profile-cloud-local"
+        );
+      }
 
       if (phase === "syncing") {
-        headerBtn.dataset.syncState = "syncing";
-        headerBtn.classList.add("vita-cloud-btn-syncing");
+        if (headerBtn) {
+          headerBtn.dataset.syncState = "syncing";
+          headerBtn.classList.add("vita-cloud-btn-syncing");
+        }
+        if (profileCard) {
+          profileCard.dataset.syncState = "syncing";
+          profileCard.classList.add("vita-profile-cloud-syncing");
+        }
         if (headerPing) {
           headerPing.className = "vita-cloud-ping absolute inline-flex h-full w-full rounded-full bg-sky-300 opacity-85";
         }
         if (headerDot) {
           headerDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-sky-300 shadow-[0_0_8px_rgba(56,189,248,0.95)]";
         }
-        if (profileDot) {
-          profileDot.className = "w-2 h-2 rounded-full bg-sky-300 shadow-[0_0_6px_rgba(56,189,248,0.95)]";
-        }
         if (headerIcon) {
           headerIcon.className = "fa-solid fa-arrows-rotate vita-cloud-spin text-sky-300 text-sm";
+        }
+        if (profileIconBox) {
+          profileIconBox.className = "w-8 h-8 rounded-xl bg-sky-500/20 border border-sky-400/50 text-sky-300 flex items-center justify-center shrink-0 transition-all duration-300";
+        }
+        if (profileIcon) {
+          profileIcon.className = "fa-solid fa-arrows-rotate vita-cloud-spin text-xs text-sky-300";
+        }
+        if (profilePill) {
+          profilePill.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-sky-500/25 text-sky-200 border border-sky-400/55 shrink-0 transition-all duration-300";
+        }
+        if (profilePing) {
+          profilePing.className = "vita-cloud-ping absolute inline-flex h-full w-full rounded-full bg-sky-300 opacity-85";
+        }
+        if (profileDot) {
+          profileDot.className = "relative inline-flex rounded-full h-2 w-2 bg-sky-300 shadow-[0_0_8px_rgba(56,189,248,0.95)]";
         }
         if (headerLabel) {
           headerLabel.textContent = customLabel || "Eşitleniyor...";
@@ -682,20 +723,49 @@ let currentAuthMode = "login";
         if (headerSublabel) {
           headerSublabel.textContent = customSublabel || "Aktif Senkronizasyon";
         }
+        if (profileBarFill) {
+          profileBarFill.className = "vita-cloud-status-bar-fill h-full rounded-full bg-gradient-to-r from-sky-400 via-indigo-400 to-teal-300 shadow-[0_0_10px_rgba(56,189,248,0.85)]";
+          profileBarFill.style.width = "76%";
+        }
+        if (profileMetaText) {
+          profileMetaText.textContent = acc && acc.email ? `${acc.email} ile eşitleniyor...` : "Bulut sunucusuyla eşitleniyor...";
+        }
+        if (profilePercentBadge) {
+          profilePercentBadge.className = "font-extrabold text-sky-300 shrink-0";
+          profilePercentBadge.textContent = "Aktarılıyor...";
+        }
       } else if (phase === "synced") {
-        headerBtn.dataset.syncState = "synced";
-        headerBtn.classList.add("vita-cloud-btn-synced");
+        if (headerBtn) {
+          headerBtn.dataset.syncState = "synced";
+          headerBtn.classList.add("vita-cloud-btn-synced");
+        }
+        if (profileCard) {
+          profileCard.dataset.syncState = "synced";
+          profileCard.classList.add("vita-profile-cloud-synced");
+        }
         if (headerPing) {
           headerPing.className = "vita-cloud-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-80";
         }
         if (headerDot) {
           headerDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.95)]";
         }
-        if (profileDot) {
-          profileDot.className = "w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.95)]";
-        }
         if (headerIcon) {
           headerIcon.className = "fa-solid fa-cloud text-emerald-300 text-sm scale-110 transition-transform duration-300";
+        }
+        if (profileIconBox) {
+          profileIconBox.className = "w-8 h-8 rounded-xl bg-emerald-500/25 border border-emerald-400/60 text-emerald-200 flex items-center justify-center shrink-0 transition-all duration-300";
+        }
+        if (profileIcon) {
+          profileIcon.className = "fa-solid fa-cloud-arrow-up text-xs text-emerald-200 scale-110 transition-transform duration-300";
+        }
+        if (profilePill) {
+          profilePill.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/25 text-emerald-100 border border-emerald-300/60 shrink-0 transition-all duration-300";
+        }
+        if (profilePing) {
+          profilePing.className = "vita-cloud-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-85";
+        }
+        if (profileDot) {
+          profileDot.className = "relative inline-flex rounded-full h-2 w-2 bg-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.95)]";
         }
         if (headerLabel) {
           headerLabel.textContent = customLabel || "Bulut Eşitlendi ✓";
@@ -703,52 +773,123 @@ let currentAuthMode = "login";
         if (headerSublabel) {
           headerSublabel.textContent = customSublabel || "Az önce güncellendi";
         }
+        if (profileBarFill) {
+          profileBarFill.className = "vita-cloud-status-bar-fill h-full rounded-full bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.9)]";
+          profileBarFill.style.width = "100%";
+        }
+        if (profileMetaText) {
+          profileMetaText.textContent = acc && acc.email ? `${acc.email} • Şimdi eşitlendi` : "Bulut yedeği başarıyla güncellendi";
+        }
+        if (profilePercentBadge) {
+          profilePercentBadge.className = "font-extrabold text-emerald-300 shrink-0";
+          profilePercentBadge.textContent = "%100 Eşitlendi";
+        }
       } else if (connected || phase === "connected") {
-        headerBtn.dataset.syncState = "connected";
-        headerBtn.classList.add("vita-cloud-btn-connected");
+        if (headerBtn) {
+          headerBtn.dataset.syncState = "connected";
+          headerBtn.classList.add("vita-cloud-btn-connected");
+          headerBtn.title = acc.email
+            ? `Bulut Eşitleme Aktif (${acc.email}) • Son: ${acc.lastSync || "Az önce"}`
+            : "Google Bulut Eşitleme Aktif";
+        }
+        if (profileCard) {
+          profileCard.dataset.syncState = "connected";
+          profileCard.classList.add("vita-profile-cloud-connected");
+        }
         if (headerPing) {
           headerPing.className = "vita-cloud-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
         }
         if (headerDot) {
           headerDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.95)]";
         }
-        if (profileDot) {
-          profileDot.className = "w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.95)]";
-        }
         if (headerIcon) {
           headerIcon.className = "fa-solid fa-cloud text-emerald-300 text-sm transition-transform duration-300";
         }
+        if (profileIconBox) {
+          profileIconBox.className = "w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/45 text-emerald-300 flex items-center justify-center shrink-0 transition-all duration-300";
+        }
+        if (profileIcon) {
+          profileIcon.className = "fa-solid fa-cloud text-xs text-emerald-300 transition-transform duration-300";
+        }
+        if (profilePill) {
+          profilePill.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-200 border border-emerald-400/50 shrink-0 transition-all duration-300";
+        }
+        if (profilePing) {
+          profilePing.className = "vita-cloud-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
+        }
+        if (profileDot) {
+          profileDot.className = "relative inline-flex rounded-full h-2 w-2 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.95)]";
+        }
         if (headerLabel) {
-          headerLabel.textContent = customLabel || "Açık";
+          headerLabel.textContent = customLabel || "Canlı Bağlı";
         }
         if (headerSublabel) {
           headerSublabel.textContent = customSublabel || (acc.email ? "Senkronize • Canlı" : "Senkronize");
         }
-        headerBtn.title = acc.email
-          ? `Bulut Eşitleme Aktif (${acc.email}) • Son: ${acc.lastSync || "Az önce"}`
-          : "Google Bulut Eşitleme Aktif";
+        if (profileBarFill) {
+          profileBarFill.className = "vita-cloud-status-bar-fill h-full rounded-full bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.75)]";
+          profileBarFill.style.width = "100%";
+        }
+        if (profileMetaText) {
+          profileMetaText.textContent = acc.email
+            ? `${acc.email} • Son: ${acc.lastSync || "Az önce"}`
+            : "Google Bulut yedeklemesi aktif";
+        }
+        if (profilePercentBadge) {
+          profilePercentBadge.className = "font-extrabold text-emerald-300 shrink-0";
+          profilePercentBadge.textContent = "%100 Aktif";
+        }
       } else {
-        headerBtn.dataset.syncState = "local";
-        headerBtn.classList.add("vita-cloud-btn-local");
+        if (headerBtn) {
+          headerBtn.dataset.syncState = "local";
+          headerBtn.classList.add("vita-cloud-btn-local");
+          headerBtn.title = "Yerel Mod • Google / Firebase Bulut Eşitlemeyi Başlatmak İçin Tıklayın";
+        }
+        if (profileCard) {
+          profileCard.dataset.syncState = "local";
+          profileCard.classList.add("vita-profile-cloud-local");
+        }
         if (headerPing) {
           headerPing.className = "vita-cloud-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75 hidden";
         }
         if (headerDot) {
           headerDot.className = "relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.9)]";
         }
-        if (profileDot) {
-          profileDot.className = "w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.9)]";
-        }
         if (headerIcon) {
           headerIcon.className = "fa-solid fa-cloud text-sky-300 text-sm transition-transform duration-300";
         }
+        if (profileIconBox) {
+          profileIconBox.className = "w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-400/35 text-amber-300 flex items-center justify-center shrink-0 transition-all duration-300";
+        }
+        if (profileIcon) {
+          profileIcon.className = "fa-solid fa-cloud text-xs text-amber-300 transition-transform duration-300";
+        }
+        if (profilePill) {
+          profilePill.className = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-200 border border-amber-400/40 shrink-0 transition-all duration-300";
+        }
+        if (profilePing) {
+          profilePing.className = "vita-cloud-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 hidden";
+        }
+        if (profileDot) {
+          profileDot.className = "relative inline-flex rounded-full h-2 w-2 bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.95)]";
+        }
         if (headerLabel) {
-          headerLabel.textContent = customLabel || "Yerel";
+          headerLabel.textContent = customLabel || "Yerel Mod";
         }
         if (headerSublabel) {
-          headerSublabel.textContent = customSublabel || "Yerel Mod";
+          headerSublabel.textContent = customSublabel || "Cihazda Yerel Depolama";
         }
-        headerBtn.title = "Yerel Mod • Google / Firebase Bulut Eşitlemeyi Başlatmak İçin Tıklayın";
+        if (profileBarFill) {
+          profileBarFill.className = "vita-cloud-status-bar-fill h-full rounded-full bg-gradient-to-r from-amber-400 via-amber-300 to-sky-400 shadow-[0_0_8px_rgba(251,191,36,0.65)]";
+          profileBarFill.style.width = "38%";
+        }
+        if (profileMetaText) {
+          profileMetaText.textContent = "Google / Firebase bağlamak için dokunun";
+        }
+        if (profilePercentBadge) {
+          profilePercentBadge.className = "font-extrabold text-amber-300 shrink-0";
+          profilePercentBadge.textContent = "Yerel • Cihaz İçi";
+        }
       }
     }
 

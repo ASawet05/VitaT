@@ -611,15 +611,7 @@
     const percent = Math.round((completedCount / totalCount) * 100);
     const permState = getEffectivePermissionState();
 
-    // Update header/drawer badges
-    const headerBadge = document.getElementById("headerPwaNotifCountBadge");
-    if (headerBadge) {
-      headerBadge.textContent = `${completedCount}/${totalCount}`;
-      headerBadge.className = completedCount === totalCount
-        ? "px-1.5 py-0.2 rounded-full bg-emerald-100 text-[10px] font-black text-emerald-800 border border-emerald-300"
-        : "px-1.5 py-0.2 rounded-full bg-white text-[10px] font-black text-sky-800 border border-sky-200";
-    }
-
+    // Update drawer summary badges
     const drawerSummarySubtext = document.getElementById("pwaNotifDrawerSummarySubtext");
     if (drawerSummarySubtext) {
       drawerSummarySubtext.textContent = `${browserProfile.shortLabel} • ${swProfile.shortLabel} • İzin: ${permState.toUpperCase()} (${completedCount}/${totalCount} kriter hazır, %${percent}).`;

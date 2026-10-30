@@ -1034,8 +1034,6 @@ function getDoctorReportMode() {
       const quickDrawerDot = document.getElementById("drawerQuickNotifDot");
       const quickDrawerIcon = document.getElementById("drawerQuickNotifIcon");
       const quickDrawerBadge = document.getElementById("drawerQuickNotifStateBadge");
-      const homeSwitch = document.getElementById("homeDosageNotifSwitch");
-      const homeKnob = document.getElementById("homeDosageNotifSwitchKnob");
       const permBadge = document.getElementById("settingsBrowserPermBadge");
       const hintEl = document.getElementById("settingsNotifCombinedHint");
 
@@ -1075,17 +1073,6 @@ function getDoctorReportMode() {
         } else {
           btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 transition cursor-pointer shrink-0";
           btn.textContent = "Kapalı";
-        }
-      }
-
-      if (homeSwitch && homeKnob) {
-        homeSwitch.setAttribute("aria-checked", enabled ? "true" : "false");
-        if (enabled) {
-          homeSwitch.className = "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-teal-600 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1";
-          homeKnob.className = "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-5";
-        } else {
-          homeSwitch.className = "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent bg-slate-300 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-1";
-          homeKnob.className = "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out translate-x-0";
         }
       }
 

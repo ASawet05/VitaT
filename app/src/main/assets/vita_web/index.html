@@ -89,6 +89,39 @@
     border-color: rgba(56, 189, 248, 0.55) !important;
     box-shadow: 0 0 10px rgba(56, 189, 248, 0.18);
   }
+  @keyframes vitaCloudBarShimmer {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .vita-profile-cloud-card {
+    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .vita-profile-cloud-local {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.96));
+    border-color: rgba(251, 191, 36, 0.38);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(2, 6, 23, 0.35);
+  }
+  .vita-profile-cloud-connected {
+    background: linear-gradient(135deg, rgba(6, 78, 59, 0.55), rgba(15, 23, 42, 0.96));
+    border-color: rgba(16, 185, 129, 0.55);
+    box-shadow: inset 0 1px 0 rgba(52, 211, 153, 0.15), 0 0 16px rgba(16, 185, 129, 0.18);
+  }
+  .vita-profile-cloud-syncing {
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.72), rgba(49, 46, 129, 0.88));
+    border-color: rgba(56, 189, 248, 0.75);
+    box-shadow: 0 0 18px rgba(56, 189, 248, 0.32);
+  }
+  .vita-profile-cloud-synced {
+    background: linear-gradient(135deg, rgba(6, 95, 70, 0.82), rgba(15, 118, 110, 0.88));
+    border-color: rgba(52, 211, 153, 0.85);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+  }
+  .vita-cloud-status-bar-fill {
+    transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1), background 0.35s ease, box-shadow 0.35s ease;
+    background-size: 200% 200%;
+    animation: vitaCloudBarShimmer 2.4s ease infinite;
+  }
 </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col antialiased selection:bg-teal-500 selection:text-white overflow-x-hidden">
@@ -265,28 +298,48 @@
 <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 ml-0.5"></i>
 </button>
 <!-- Sağ Üst Profil Kısa Açılır Menüsü -->
-<div aria-label="Profil hızlı menüsü" class="hidden absolute right-0 mt-2 w-60 rounded-2xl bg-navy-900 text-white shadow-2xl border border-slate-700/90 py-1.5 z-50" id="headerProfileDropdownMenu" role="menu">
-<button class="w-full px-3.5 py-2.5 text-left text-xs font-bold text-slate-100 hover:bg-navy-800 flex items-center gap-2.5 transition cursor-pointer" onclick="closeHeaderProfileMenu(); openProfileModal(true)" role="menuitem" type="button">
+<div aria-label="Profil hızlı menüsü" class="hidden absolute right-0 mt-2 w-72 sm:w-80 rounded-2xl bg-navy-900 text-white shadow-2xl border border-slate-700/90 p-2 z-50 space-y-1" id="headerProfileDropdownMenu" role="menu">
+<button class="w-full px-3 py-2.5 rounded-xl text-left text-xs font-bold text-slate-100 hover:bg-navy-800 flex items-center gap-2.5 transition cursor-pointer" onclick="closeHeaderProfileMenu(); openProfileModal(true)" role="menuitem" type="button">
 <i class="fa-solid fa-user-pen text-teal-400 w-4 text-center"></i>
 <span>Profilim</span>
 </button>
-<button class="w-full px-3.5 py-2.5 text-left text-xs font-bold text-sky-200 hover:bg-navy-800 flex items-center justify-between gap-2 transition cursor-pointer" onclick="closeHeaderProfileMenu(); openCloudSyncModal('profile')" role="menuitem" type="button">
-<span class="flex items-center gap-2.5 min-w-0">
-<i class="fa-solid fa-cloud text-sky-400 w-4 text-center"></i>
-<span class="truncate">Bulut Eşitleme &amp; Google</span>
+<!-- Modern Canlı Bulut Eşitleme Durum Çubuğu ve Göstergesi -->
+<button class="vita-profile-cloud-card vita-profile-cloud-local w-full p-3 rounded-xl border text-left transition cursor-pointer group block" data-sync-state="local" id="profileMenuCloudStatusCard" onclick="closeHeaderProfileMenu(); openCloudSyncModal('profile')" role="menuitem" type="button">
+<div class="flex items-center justify-between gap-2">
+<div class="flex items-center gap-2.5 min-w-0">
+<div class="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-400/35 text-amber-300 flex items-center justify-center shrink-0 transition-all duration-300" id="profileMenuCloudIconBox">
+<i class="fa-solid fa-cloud text-xs transition-transform duration-300" id="profileMenuCloudIcon"></i>
+</div>
+<div class="min-w-0">
+<div class="text-xs font-extrabold text-white truncate">Bulut Eşitleme &amp; Google</div>
+<div class="text-[10px] font-semibold text-slate-300 truncate mt-0.5" id="headerCloudSyncSublabel">Cihazda Yerel Depolama</div>
+</div>
+</div>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/20 text-amber-200 border border-amber-400/40 shrink-0 transition-all duration-300" id="profileMenuCloudPill">
+<span class="relative flex h-2 w-2 shrink-0">
+<span class="vita-cloud-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 hidden" id="profileMenuCloudPing"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.95)]" id="profileMenuCloudSyncDot"></span>
 </span>
-<span class="flex items-center gap-1.5 shrink-0">
-<span class="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.9)]" id="profileMenuCloudSyncDot"></span>
-<span class="text-[10px] font-extrabold text-slate-300" id="headerCloudSyncLabel">Yerel</span>
-<span class="hidden" id="headerCloudSyncSublabel">Yerel Mod</span>
+<span id="headerCloudSyncLabel">Yerel Mod</span>
 </span>
+</div>
+<!-- Anlık Renkli Durum Çubuğu (Status Bar) -->
+<div class="mt-2.5 space-y-1.5">
+<div class="h-2 w-full rounded-full bg-slate-950/85 border border-slate-700/80 p-0.5 overflow-hidden" id="profileMenuCloudBarTrack">
+<div class="vita-cloud-status-bar-fill h-full rounded-full bg-gradient-to-r from-amber-400 via-amber-300 to-sky-400 shadow-[0_0_8px_rgba(251,191,36,0.65)]" id="profileMenuCloudBarFill" style="width: 38%"></div>
+</div>
+<div class="flex items-center justify-between gap-2 text-[10px]" id="profileMenuCloudMetaRow">
+<span class="font-medium text-slate-300 truncate" id="profileMenuCloudMetaText">Google / Firebase bağlamak için dokunun</span>
+<span class="font-extrabold text-amber-300 shrink-0" id="profileMenuCloudPercentBadge">Yerel • Cihaz İçi</span>
+</div>
+</div>
 </button>
-<button class="w-full px-3.5 py-2.5 text-left text-xs font-bold text-slate-100 hover:bg-navy-800 flex items-center gap-2.5 transition cursor-pointer" onclick="closeHeaderProfileMenu(); navigateToView('view-settings')" role="menuitem" type="button">
+<button class="w-full px-3 py-2.5 rounded-xl text-left text-xs font-bold text-slate-100 hover:bg-navy-800 flex items-center gap-2.5 transition cursor-pointer" onclick="closeHeaderProfileMenu(); navigateToView('view-settings')" role="menuitem" type="button">
 <i class="fa-solid fa-sliders text-sky-400 w-4 text-center"></i>
 <span>Ayarlar</span>
 </button>
 <div class="my-1 border-t border-navy-800"></div>
-<button class="w-full px-3.5 py-2.5 text-left text-xs font-bold text-rose-300 hover:bg-rose-950/50 flex items-center gap-2.5 transition cursor-pointer" onclick="closeHeaderProfileMenu(); handleLogout()" role="menuitem" type="button">
+<button class="w-full px-3 py-2.5 rounded-xl text-left text-xs font-bold text-rose-300 hover:bg-rose-950/50 flex items-center gap-2.5 transition cursor-pointer" onclick="closeHeaderProfileMenu(); handleLogout()" role="menuitem" type="button">
 <i class="fa-solid fa-arrow-right-from-bracket text-rose-400 w-4 text-center"></i>
 <span>Güvenli Çıkış</span>
 </button>
@@ -450,8 +503,11 @@
 <p class="text-xs text-slate-500 mt-0.5">Bugünkü takviyelerinizi doğrudan işaretleyin; ilaç etkileşim denetimi için sağdaki ünlem kalkanına veya alt çekmeceye dokunun.</p>
 </div>
 <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-<button class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 transition flex items-center gap-1.5 cursor-pointer shadow-sm" onclick="if(window.SoundEffects) SoundEffects.playClick(); openAddSupplementModal()">
+<button class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 transition flex items-center gap-1.5 cursor-pointer shadow-sm" onclick="if(window.SoundEffects) SoundEffects.playClick(); openAddSupplementModal()" type="button">
 <i class="fa-solid fa-plus text-teal-600"></i> <span>Manuel Ekle</span>
+</button>
+<button class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-300 transition flex items-center gap-1.5 cursor-pointer shadow-sm" id="btnHomeScanSupplementBarcode" onclick="if(window.SoundEffects) SoundEffects.playClick(); openBarcodeScannerModal('supplement')" title="Kamerayla barkod okutarak veya kutu fotoğrafı yükleyerek yalnızca vitamin ve gıda takviyesi ekle" type="button">
+<i class="fa-solid fa-barcode text-sky-700"></i> <span>Barkod / AI ile Takviye Ekle</span>
 </button>
 <button class="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 transition flex items-center gap-1.5 cursor-pointer shadow-sm" id="btnQuickMedShieldTrigger" onclick="if(window.SoundEffects) SoundEffects.playClick(); toggleMedShieldDrawer(true)" title="Gerçek Zamanlı İlaç–Besin Etkileşim Kalkanını Aç / İlaç Seç" type="button">
 <i class="fa-solid fa-circle-exclamation text-rose-600"></i>
@@ -504,6 +560,9 @@
 </div>
 <button class="px-3.5 py-2 rounded-xl bg-navy-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0" onclick="if(window.SoundEffects) SoundEffects.playClick(); addQuickMedicationFromInput()" type="button">
 <i class="fa-solid fa-shield-heart text-teal-300"></i> İlaç Ekle &amp; Denetle
+</button>
+<button class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0 shadow-xs" id="btnOpenMedicationScannerModal" onclick="if(window.SoundEffects) SoundEffects.playClick(); openBarcodeScannerModal('medication')" title="Kamerayla barkod okutarak veya kutu fotoğrafı yükleyerek reçeteli/reçetesiz ilaç seç ve denetle" type="button">
+<i class="fa-solid fa-camera text-indigo-200"></i> <span>Barkod / AI ile İlaç Tara &amp; Denetle</span>
 </button>
 </div>
 </div>
@@ -829,7 +888,7 @@
 <!-- ========================================================================= -->
 <!--     GÖRÜNÜM 3: NEYİMVAR? ANAMNEZ, eGFR & KLİNİK KARAR MOTORU (view-neyim) -->
 <!-- ========================================================================= -->
-<section class="space-y-5 hidden vita-analysis-locked" id="view-neyim">
+<section class="space-y-5 hidden" id="view-neyim">
 <!-- NeyimVar Hero Kartı -->
 <div class="bg-gradient-to-r from-navy-900 via-slate-900 to-medTeal-700 rounded-3xl p-5 sm:p-7 text-white shadow-xl relative overflow-hidden">
 <div class="relative z-10 max-w-3xl">
@@ -1153,20 +1212,54 @@
 </div>
 </div>
 </div>
-<!-- Analiz Çalıştır Butonu -->
-<div class="hidden pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4" id="cdssAnalysisActionRow">
-<div class="text-xs text-slate-500 flex items-center gap-1.5">
+<!-- Hızlı Yaş / Cinsiyet / Kreatinin (eGFR CKD-EPI) Doğrulama ve Giriş Barı -->
+<div class="rounded-2xl border border-teal-200 bg-teal-50/50 p-4 space-y-3" id="neyimEgfrInputsPanel">
+<div class="flex flex-wrap items-center justify-between gap-2">
+<div>
+<h3 class="text-xs font-black text-navy-900 flex items-center gap-1.5">
+<i class="fa-solid fa-kidneys text-teal-600"></i>
+<span>CKD-EPI eGFR &amp; Triyaj Parametreleri (Yaş, Cinsiyet ve Kreatinin)</span>
+</h3>
+<p class="text-[11px] text-slate-600 mt-0.5">Profil ve Tahlillerim verilerinizden otomatik doldurulur; dilerseniz buradan doğrudan güncelleyip anında eGFR ve triyaj hesaplayabilirsiniz.</p>
+</div>
+<span class="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-white text-teal-800 border border-teal-200" id="neyimLiveEgfrPreviewBadge">CKD-EPI 2021 Hazır</span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+<div>
+<label class="block text-[11px] font-bold text-slate-700 mb-1" for="neyimInputAge">Yaş (1 - 110)</label>
+<input class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-bold text-navy-900 focus:outline-none focus:border-teal-500" id="neyimInputAge" max="110" min="1" oninput="if(typeof syncNeyimInlineInputsPreview==='function') syncNeyimInlineInputsPreview()" placeholder="Örn: 34" type="number"/>
+</div>
+<div>
+<label class="block text-[11px] font-bold text-slate-700 mb-1" for="neyimInputGender">Biyolojik Cinsiyet</label>
+<select class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-bold text-navy-900 focus:outline-none focus:border-teal-500" id="neyimInputGender" onchange="if(typeof syncNeyimInlineInputsPreview==='function') syncNeyimInlineInputsPreview()">
+<option value="K">Kadın</option>
+<option value="E">Erkek</option>
+</select>
+</div>
+<div>
+<label class="block text-[11px] font-bold text-slate-700 mb-1" for="neyimInputCreatinine">Serum Kreatinin (mg/dL) <span class="text-[10px] font-normal text-slate-500">(İsteğe bağlı)</span></label>
+<input class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-bold text-navy-900 focus:outline-none focus:border-teal-500" id="neyimInputCreatinine" max="15" min="0.1" oninput="if(typeof syncNeyimInlineInputsPreview==='function') syncNeyimInlineInputsPreview()" placeholder="Örn: 0.85" step="0.01" type="number"/>
+</div>
+</div>
+</div>
+<!-- Analiz Çalıştır Butonu (Her Adımda Görünür ve Tetiklenebilir) -->
+<div class="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4" id="cdssAnalysisActionRow">
+<div class="text-xs text-slate-600 flex items-center gap-1.5">
 <i class="fa-solid fa-user-shield text-teal-600"></i>
-            Profiliniz, belirtileriniz ve varsa tahlilleriniz birlikte değerlendirilir. Otomatik tanı veya doz önerilmez.
-          </div>
-<button class="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-gradient-to-r from-medTeal-600 to-teal-500 hover:from-medTeal-700 hover:to-teal-600 text-white font-bold text-sm shadow-lg shadow-teal-500/25 transition transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer" id="btnRunCDSS" onclick="if(window.SoundEffects) SoundEffects.playClick(); runCDSSAnalysis()">
+<span>Seçilen belirtileriniz, yaş/cinsiyet bilgileriniz ve kreatinin (eGFR) değerinizle klinik triyaj seviyesini hesaplar.</span>
+</div>
+<button class="w-full sm:w-auto px-7 py-3.5 rounded-xl bg-gradient-to-r from-medTeal-600 to-teal-500 hover:from-medTeal-700 hover:to-teal-600 text-white font-bold text-sm shadow-lg shadow-teal-500/25 transition transform active:scale-95 flex items-center justify-center gap-2 cursor-pointer" id="btnRunCDSS" onclick="if(window.SoundEffects) SoundEffects.playClick(); runCDSSAnalysis()" type="button">
 <i class="fa-solid fa-microchip"></i>
-<span>Ön değerlendirmeyi başlat</span>
+<span>Anamnez Triyaj ve eGFR Analiz</span>
 </button>
 </div>
+<!-- Kullanıcı Dostu Hata / Uyarı Kutusu -->
+<div aria-live="assertive" class="hidden rounded-2xl border border-rose-300 bg-rose-50 p-4 text-xs text-rose-950" id="neyimTriageErrorBanner" role="alert"></div>
+<!-- NeyimVar? Anlık Anamnez Triyaj & CKD-EPI eGFR Sonuç Kartı (Sayfa İçinde Doğrudan Görünür) -->
+<div aria-live="polite" class="hidden rounded-2xl border-2 border-teal-500/60 bg-white p-4 sm:p-5 shadow-md space-y-4" id="neyimTriageEgfrResultContainer"></div>
 <nav class="vita-anamnesis-step-controls" id="anamnesisStepControls" aria-label="Belirti değerlendirme adımları">
 <button class="vita-anamnesis-step-button vita-anamnesis-step-back" id="anamnesisStepBack" type="button" onclick="window.vitaAnamnesisStep(-1)" disabled><i class="fa-solid fa-arrow-left" aria-hidden="true"></i><span>Geri</span></button>
-<span class="vita-anamnesis-step-hint" id="anamnesisStepHint">İsterseniz bu adımı boş bırakıp devam edebilirsiniz.</span>
+<span class="vita-anamnesis-step-hint" id="anamnesisStepHint">İsterseniz bu adımı boş bırakıp devam edebilirsiniz veya doğrudan analiz butonuna tıklayabilirsiniz.</span>
 <button class="vita-anamnesis-step-button vita-anamnesis-step-next" id="anamnesisStepNext" type="button" onclick="window.vitaAnamnesisStep(1)"><span>Devam et</span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
 </nav>
 <div id="aiClinicalSynthesisSlot"></div>
@@ -2319,8 +2412,8 @@ Bulut bağlantısı olmadan verilerinizi yalnızca bu cihazda yerel olarak sakla
 </div>
 </div>
 <!-- MODAL: GOOGLE HESABI BAĞLANTISI & BULUT EŞİTLEME MERKEZİ -->
-<div class="hidden fixed inset-0 z-[60] bg-navy-950/80 backdrop-blur-md items-center justify-center p-4" id="cloudSyncModal" style="display:none">
-<div class="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-7 shadow-2xl border-2 border-indigo-500/40 relative max-h-[92vh] overflow-y-auto space-y-4">
+<div class="hidden fixed inset-0 z-[60] bg-navy-950/80 backdrop-blur-md items-center justify-center p-4 vita-cloud-sync-modal" id="cloudSyncModal" style="display:none">
+<div class="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-7 shadow-2xl border-2 border-indigo-500/40 relative max-h-[92vh] overflow-y-auto space-y-4 vita-cloud-sync-dialog">
 <button class="absolute right-5 top-5 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer" onclick="if(window.SoundEffects) SoundEffects.playClick(); closeCloudSyncModal()" type="button">
 <i class="fa-solid fa-xmark text-sm"></i>
 </button>
@@ -2835,8 +2928,8 @@ Kapat
 </div>
 <!-- Gerçek Zamanlı Ekleme Öncesi Klinik Etkileşim Ön İzleme Kutusu -->
 <div class="hidden rounded-2xl border p-3.5 space-y-2 text-xs" id="modalLiveInteractionWarning" role="status" aria-live="polite"></div>
-<button class="w-full mt-2 py-2.5 rounded-xl border border-sky-300 bg-sky-50 text-sky-900 font-bold hover:bg-sky-100 transition flex items-center justify-center gap-2" onclick="if(window.SoundEffects) SoundEffects.playClick(); openBarcodeScannerModal()" type="button">
-<i class="fa-solid fa-barcode"></i><span>📷 Kutu Karekodu / Barkod Tara</span>
+<button class="w-full mt-2 py-2.5 rounded-xl border border-sky-300 bg-sky-50 text-sky-900 font-bold hover:bg-sky-100 transition flex items-center justify-center gap-2" onclick="if(window.SoundEffects) SoundEffects.playClick(); openBarcodeScannerModal('supplement')" type="button">
+<i class="fa-solid fa-barcode"></i><span>📷 Kutu Karekodu / Barkod Tara (Yalnızca Takviye)</span>
 </button>
 <button class="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-medTeal-600 to-teal-500 text-white font-bold shadow-md hover:from-medTeal-700 hover:to-teal-600 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2" onclick="if(window.SoundEffects) SoundEffects.playClick(); commitManualSupplement()">
 <i class="fa-solid fa-plus text-sm"></i>
@@ -2845,44 +2938,76 @@ Kapat
 </div>
 </div>
 </div>
-<!-- Gerçek kamera barkod okuyucu ve isteğe bağlı Gemini fotoğraf ön incelemesi. Resmî İTS sorgusu değildir. -->
-<div aria-hidden="true" class="hidden fixed inset-0 z-[75] bg-navy-950/80 backdrop-blur-sm items-center justify-center p-3 sm:p-4 no-print" id="barcodeScannerModal" onclick="if(event.target===this) closeBarcodeScannerModal()">
+<!-- Gerçek kamera barkod okuyucu ve isteğe bağlı Gemini fotoğraf ön incelemesi. İki modlu: 'supplement' (Takviye Ekle) ve 'medication' (İlaç Seç ve Denetle). -->
+<div aria-hidden="true" class="hidden fixed inset-0 z-[75] bg-navy-950/80 backdrop-blur-sm items-center justify-center p-3 sm:p-4 no-print" data-scanner-mode="supplement" id="barcodeScannerModal" onclick="if(event.target===this) closeBarcodeScannerModal()">
 <section aria-labelledby="barcodeScannerTitle" aria-modal="true" class="w-full max-w-2xl max-h-[94dvh] overflow-y-auto rounded-3xl bg-white shadow-2xl border border-teal-400" role="dialog">
-<div class="flex items-center justify-between gap-3 rounded-t-3xl bg-gradient-to-r from-navy-900 to-medTeal-700 px-5 py-4 text-white">
-<div><h2 class="font-black text-base" id="barcodeScannerTitle"><i class="fa-solid fa-barcode mr-2 text-teal-200"></i>Kutu Barkodu / Karekod Okuyucu</h2><p class="mt-1 text-[10px] text-teal-100">Kamera ile gerçek barkod çözme · İTS ürün doğrulaması içermez</p></div>
-<button aria-label="Kapat" class="w-9 h-9 rounded-xl hover:bg-white/15" onclick="closeBarcodeScannerModal()" type="button"><i class="fa-solid fa-xmark"></i></button>
+<div class="flex items-center justify-between gap-3 rounded-t-3xl bg-gradient-to-r from-navy-900 to-medTeal-700 px-5 py-4 text-white" id="barcodeScannerHeaderBar">
+<div class="min-w-0">
+<div class="flex flex-wrap items-center gap-2 mb-1">
+<span class="inline-flex items-center gap-1 rounded-full bg-teal-400/20 border border-teal-300/40 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-teal-100" id="barcodeScannerModeBadge">Mod: Vitamin &amp; Gıda Takviyesi</span>
+<span class="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-200">EAN-13 TR • Kamera • AI Görsel</span>
+</div>
+<h2 class="font-black text-base" id="barcodeScannerTitle"><i class="fa-solid fa-barcode mr-2 text-teal-200"></i>Takviye Barkod &amp; Yapay Zeka Kutusu Okuyucu</h2>
+<p class="mt-0.5 text-[10px] text-teal-100" id="barcodeScannerSubtitle">Yalnızca vitaminler ve gıda takviyeleri listelenir/eşleştirilir · Türkiye EAN-13 (869) veritabanı aktif</p>
+</div>
+<button aria-label="Kapat" class="w-9 h-9 rounded-xl hover:bg-white/15 shrink-0" onclick="closeBarcodeScannerModal()" type="button"><i class="fa-solid fa-xmark"></i></button>
 </div>
 <div class="space-y-4 p-4 sm:p-5">
+<!-- Mod Değiştirici Sekmeler (Takviye Ekle vs İlaç Seç ve Denetle) -->
+<div class="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1.5 border border-slate-200" role="tablist">
+<button class="py-2 px-3 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer bg-teal-600 text-white shadow-xs" id="btnScannerTabSupplement" onclick="if(window.SoundEffects) SoundEffects.playClick(); switchBarcodeScannerMode('supplement')" type="button">
+<i class="fa-solid fa-capsules"></i>
+<span>Takviye Ekle (Vitamin/Mineral)</span>
+</button>
+<button class="py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer bg-white text-slate-700 hover:bg-slate-50" id="btnScannerTabMedication" onclick="if(window.SoundEffects) SoundEffects.playClick(); switchBarcodeScannerMode('medication')" type="button">
+<i class="fa-solid fa-prescription-bottle-medical"></i>
+<span>İlaç Seç ve Denetle (Reçeteli/Genel)</span>
+</button>
+</div>
 <section class="rounded-2xl border border-slate-300 bg-navy-950 p-3 sm:p-4 text-center text-white">
-<div class="relative mx-auto min-h-40 w-full max-w-md overflow-hidden rounded-2xl border-2 border-teal-300/80 bg-slate-900 flex items-center justify-center">
+<div class="relative mx-auto min-h-40 w-full max-w-md overflow-hidden rounded-2xl border-2 border-teal-300/80 bg-slate-900 flex items-center justify-center" id="barcodeCameraViewport">
 <video aria-label="Barkod tarama kamera görüntüsü" autoplay="" class="hidden w-full max-h-64 object-contain" id="barcodeCameraVideo" muted="" playsinline=""></video>
+<div class="hidden w-full max-h-64 overflow-hidden" id="html5QrCodeReaderContainer"></div>
 <div class="py-7 px-4" id="barcodeCameraPlaceholder">
 <i class="fa-solid fa-camera text-5xl text-teal-200/90"></i>
 <p class="mt-3 text-xs font-bold">Kamerayı açıp kutudaki barkoda odaklayın</p>
-<p class="mt-1 text-[10px] text-slate-300">Karekod, DataMatrix ve desteklenen çizgili barkodlar taranır.</p>
+<p class="mt-1 text-[10px] text-slate-300">EAN-13 (869...), Karekod, DataMatrix ve çizgili barkodlar taranır.</p>
 </div>
 <div class="hidden pointer-events-none absolute inset-x-5 top-1/2 h-0.5 bg-teal-300 shadow-[0_0_18px_5px_rgba(20,184,166,.45)] vita-scanner-line" id="barcodeCameraAim"></div>
 </div>
 <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
-<button class="min-h-10 rounded-xl bg-teal-500 px-4 py-2 text-xs font-black text-navy-950 hover:bg-teal-400" id="barcodeStartCameraBtn" onclick="if(window.SoundEffects) SoundEffects.playClick(); startBarcodeCameraScan()" type="button"><i class="fa-solid fa-camera mr-1"></i> Kamerayı Aç ve Tara</button>
+<button class="min-h-10 rounded-xl bg-teal-500 px-4 py-2 text-xs font-black text-navy-950 hover:bg-teal-400" id="barcodeStartCameraBtn" onclick="if(window.SoundEffects) SoundEffects.playClick(); startBarcodeCameraScan()" type="button"><i class="fa-solid fa-camera mr-1"></i> Kamerayı Aç ve Barkod Oku</button>
 <button class="hidden min-h-10 rounded-xl border border-white/30 bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20" id="barcodeStopCameraBtn" onclick="stopBarcodeCameraScan()" type="button"><i class="fa-solid fa-stop mr-1"></i> Taramayı Durdur</button>
 </div>
 <p aria-live="polite" class="mt-2 text-[10px] text-slate-300" id="barcodeCameraStatus">Kamera başlatılmadı.</p>
 </section>
-<section class="rounded-2xl border border-slate-200 p-3 sm:p-4 space-y-2">
-<h3 class="text-xs font-black text-navy-900"><i class="fa-solid fa-keyboard mr-1.5 text-teal-700"></i>Barkod numarasını elle gir</h3>
-<div class="flex gap-2"><input autocomplete="off" class="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono focus:border-teal-500 focus:outline-none" id="barcodeManualValue" maxlength="180" placeholder="Okunan GTIN / karekod metni" type="text"/><button class="min-h-10 rounded-xl bg-slate-800 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700" onclick="useManualBarcodeValue()" type="button">Kodu işle</button></div>
-<div aria-live="polite" class="hidden rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-950" id="barcodeDecodedResult"></div>
-<div aria-live="polite" class="hidden rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700" id="barcodeProductLookupStatus"></div>
-<div class="hidden mt-3 rounded-2xl border-2 border-teal-300 bg-teal-50 p-3 sm:p-4 space-y-3" id="barcodeAddSchedulePanel">
-<div><h4 class="text-sm font-black text-teal-950"><i class="fa-solid fa-calendar-plus mr-1.5"></i> Bulunan ürünü günlük çizelgeye ekle</h4><p class="mt-1 text-[10px] leading-relaxed text-teal-900">Katalog eşleşmesi yalnızca ürün adı için bir ipucudur; ürünün size uygunluğunu, dozunu veya kullanımını doğrulamaz. Ürün adını ve etiket bilgisini kontrol ettikten sonra kayıt edin.</p></div>
+<section class="rounded-2xl border border-slate-200 p-3 sm:p-4 space-y-2.5">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+<h3 class="text-xs font-black text-navy-900"><i class="fa-solid fa-keyboard mr-1.5 text-teal-700"></i>Türkiye EAN-13 Barkod / Ürün Arama</h3>
+<span class="text-[10px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-200" id="barcodeTrDbCountBadge">TR Veritabanı Aktif</span>
+</div>
+<!-- Türkiye Veritabanı Hızlı Seçim / Filtreli Liste -->
 <div>
-<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeSupplementName">Ürün / takviye adı *</label>
-<input autocomplete="off" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs focus:border-teal-500 focus:outline-none" id="barcodeSupplementName" maxlength="120" oninput="suggestBarcodeScheduleFromName()" placeholder="Örn. Omega-3 1000 mg" type="text"/>
+<label class="block text-[10px] font-bold text-slate-600 mb-1" for="barcodeTrDatabaseQuickSelect" id="barcodeTrDatabaseQuickSelectLabel">Türkiye'de Kayıtlı Yaygın Vitamin &amp; Gıda Takviyelerinden Hızlı Seç (EAN-13):</label>
+<select class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-navy-900 focus:border-teal-500 focus:outline-none" id="barcodeTrDatabaseQuickSelect" onchange="if(this.value) { document.getElementById('barcodeManualValue').value = this.value; useManualBarcodeValue(); }">
+<option value="">— Türkiye Barkod Veritabanından Ürün Seçin veya Aşağıya Barkod Yazın —</option>
+</select>
+</div>
+<div class="flex gap-2"><input autocomplete="off" class="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono focus:border-teal-500 focus:outline-none" id="barcodeManualValue" maxlength="180" onkeydown="if(event.key==='Enter'){event.preventDefault(); useManualBarcodeValue();}" placeholder="EAN-13 barkod (Örn: 8699756800105) veya ürün adı yazın" type="text"/><button class="min-h-10 rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-slate-700 shrink-0" onclick="useManualBarcodeValue()" type="button">Sorgula &amp; Eşle</button></div>
+<div aria-live="polite" class="hidden rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-950" id="barcodeDecodedResult"></div>
+<!-- Kategori Filtre / Kısıtlama Uyarı Kutusu (Takviye alanında ilaç okutulursa veya ilaç alanında takviye okutulursa) -->
+<div aria-live="assertive" class="hidden rounded-xl border-2 border-rose-300 bg-rose-50 p-3 text-xs text-rose-950 space-y-2" id="barcodeCategoryFilterAlert" role="alert"></div>
+<div aria-live="polite" class="hidden rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700" id="barcodeProductLookupStatus"></div>
+<!-- MOD 1: TAKVİYE EKLEME PANELİ (Yalnızca Vitamin ve Gıda Takviyeleri İçin) -->
+<div class="hidden mt-3 rounded-2xl border-2 border-teal-300 bg-teal-50 p-3 sm:p-4 space-y-3" id="barcodeAddSchedulePanel">
+<div><h4 class="text-sm font-black text-teal-950"><i class="fa-solid fa-calendar-plus mr-1.5"></i> Bulunan takviyeyi günlük çizelgeye ekle</h4><p class="mt-1 text-[10px] leading-relaxed text-teal-900">Bu alanda yalnızca <strong>vitaminler ve gıda takviyeleri</strong> günlük çizelgeye eklenir. Ürün adını ve etiket bilgisini kontrol ettikten sonra kaydedin.</p></div>
+<div>
+<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeSupplementName">Vitamin / Gıda Takviyesi Adı *</label>
+<input autocomplete="off" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-navy-900 focus:border-teal-500 focus:outline-none" id="barcodeSupplementName" maxlength="120" oninput="suggestBarcodeScheduleFromName()" placeholder="Örn. Ocean Vitamin D3 K2 Damla" type="text"/>
 </div>
 <div>
-<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeSupplementDose">Kutuda yazan doz / kullanım notu (isteğe bağlı)</label>
-<input autocomplete="off" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs focus:border-teal-500 focus:outline-none" id="barcodeSupplementDose" maxlength="160" placeholder="Örn. hekim/eczacı talimatını buraya yazın" type="text"/>
+<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeSupplementDose">Etken Madde / Kutuda Yazan Kullanım Notu</label>
+<input autocomplete="off" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs focus:border-teal-500 focus:outline-none" id="barcodeSupplementDose" maxlength="160" placeholder="Örn. 1000 IU D3 + 11.25 mcg K2 / Günde 1 damla tok" type="text"/>
 <p class="mt-1 text-[9px] text-slate-500">Bu alan tedavi/doz önerisi üretmez. Etiketi, prospektüsü veya hekim/eczacı talimatını esas alın.</p>
 </div>
 <div class="rounded-xl border border-indigo-200 bg-white p-3">
@@ -2901,18 +3026,43 @@ Kapat
 <label class="flex items-center gap-1 rounded-lg bg-white px-2 py-1.5"><input name="barcodeScheduleDay" type="checkbox" value="0"/> Paz</label>
 </div><button class="mt-1.5 text-[10px] font-bold text-teal-800 underline" onclick="setBarcodeScheduleDays(true)" type="button">Her gün seç (talimatınız her gün ise)</button></div>
 </div>
-<button class="w-full min-h-11 rounded-xl bg-teal-700 px-4 py-2.5 text-xs font-black text-white hover:bg-teal-800" onclick="if(window.SoundEffects) SoundEffects.playClick(); addBarcodeSupplementToSchedule()" type="button"><i class="fa-solid fa-calendar-check mr-1.5"></i> Ürünü takviye/ilaç çizelgeme ekle</button>
+<button class="w-full min-h-11 rounded-xl bg-teal-700 px-4 py-2.5 text-xs font-black text-white hover:bg-teal-800" onclick="if(window.SoundEffects) SoundEffects.playClick(); addBarcodeSupplementToSchedule()" type="button"><i class="fa-solid fa-calendar-check mr-1.5"></i> Takviyeyi Günlük Çizelgeme Ekle</button>
+</div>
+<!-- MOD 2: İLAÇ SEÇ VE DENETLE PANELİ (Reçeteli / Reçetesiz Genel İlaçlar İçin) -->
+<div class="hidden mt-3 rounded-2xl border-2 border-indigo-300 bg-indigo-50/90 p-3 sm:p-4 space-y-3" id="barcodeMedicationInspectPanel">
+<div>
+<h4 class="text-sm font-black text-indigo-950"><i class="fa-solid fa-shield-heart mr-1.5 text-indigo-700"></i> Tespit Edilen İlacı Denetleme Mekanizmasına Aktar</h4>
+<p class="mt-1 text-[10px] leading-relaxed text-indigo-900">Bu modda <strong>genel ilaçlar (reçeteli/reçetesiz ilaçlar)</strong> taranır ve Günlük Protokoldeki vitamin/minerallerinizle olan emilim ve klinik etkileşimleri anında denetlenir.</p>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+<div>
+<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeDetectedMedicationName">Tespit Edilen İlaç Adı *</label>
+<input autocomplete="off" class="w-full rounded-xl border border-indigo-300 bg-white px-3 py-2 text-xs font-bold text-navy-900 focus:border-indigo-600 focus:outline-none" id="barcodeDetectedMedicationName" placeholder="Örn: Euthyrox 100 mcg / Coumadin / Pantpas" type="text"/>
+</div>
+<div>
+<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeDetectedMedicationActive">Etken Madde &amp; Farmakolojik Grup</label>
+<input autocomplete="off" class="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2 text-xs text-slate-700 focus:border-indigo-600 focus:outline-none" id="barcodeDetectedMedicationActive" placeholder="Örn: Levotiroksin Sodyum (Tiroid Hormonu)" type="text"/>
+</div>
+</div>
+<div class="rounded-xl border border-indigo-200 bg-white p-3 text-xs text-slate-700 space-y-1.5" id="barcodeMedicationLiveAuditPreview">
+<div class="font-black text-navy-900"><i class="fa-solid fa-magnifying-glass-chart mr-1 text-indigo-600"></i> Ön Etkileşim Özeti</div>
+<p class="text-[11px] text-slate-600" id="barcodeMedicationLiveAuditText">İlaç seçildiğinde mevcut takviyelerinizle (Demir, Kalsiyum, Magnezyum, D3/K2, B12, Çinko, Omega-3) çakışma analizi burada gösterilir.</p>
+</div>
+<button class="w-full min-h-11 rounded-xl bg-indigo-700 px-4 py-2.5 text-xs font-black text-white hover:bg-indigo-800 shadow-sm flex items-center justify-center gap-2 cursor-pointer" id="btnTransferScannedDrugToInspector" onclick="if(window.SoundEffects) SoundEffects.playClick(); transferScannedMedicationToInspector()" type="button">
+<i class="fa-solid fa-shield-halved"></i>
+<span>İlacı Denetleme Mekanizmasına Aktar &amp; Etkileşimleri Göster</span>
+</button>
 </div>
 </section>
 <section class="rounded-2xl border border-slate-200 p-3 sm:p-4 space-y-3">
-<div><h3 class="text-xs font-black text-navy-900"><i class="fa-solid fa-image mr-1.5 text-teal-700"></i>İlaç kutusu fotoğrafı</h3><p class="mt-1 text-[10px] leading-relaxed text-slate-500">Kutunun ön yüzünü ve ürün adını net gösteren bir fotoğraf seçin. Fotoğraf üzerindeki yazıları AI ile okumayı deneyebiliriz.</p></div>
-<label class="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-teal-300 bg-teal-50 px-3 py-2.5 text-xs font-bold text-teal-900 hover:bg-teal-100"><i class="fa-solid fa-camera-retro"></i> Fotoğraf çek / cihazdan seç<input accept="image/*" capture="environment" class="sr-only" id="barcodePhotoFile" onchange="handleBarcodePhotoSelected(event)" type="file"/></label>
-<img alt="Seçilen ilaç kutusu fotoğrafı önizlemesi" class="hidden mx-auto max-h-64 max-w-full rounded-xl border border-slate-200 object-contain" id="barcodePhotoPreview"/>
-<div class="grid grid-cols-1 sm:grid-cols-2 gap-2"><button class="min-h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-50" onclick="decodeBarcodeFromPhoto()" type="button"><i class="fa-solid fa-barcode mr-1"></i> Fotoğraftaki barkodu oku</button><button class="min-h-10 rounded-xl bg-indigo-700 px-3 py-2 text-xs font-black text-white hover:bg-indigo-800" id="barcodeAnalyzePhotoBtn" onclick="analyzeMedicationPhotoWithAI()" type="button"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Fotoğrafı Gemini ile incele</button></div>
-<label class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-[10px] leading-relaxed text-amber-950"><input class="mt-0.5 h-4 w-4 shrink-0 rounded border-amber-400 text-teal-600" id="barcodePhotoConsent" type="checkbox"/><span><strong>Fotoğraf paylaşım onayı:</strong> Seçtiğim kutu fotoğrafının ürün yazılarını analiz etmek amacıyla Google Gemini API'ye gönderilmesini onaylıyorum. Fotoğrafa kişisel bilgi eklemeyin. Bu gönderim profil/tahlil bağlamını içermez.</span></label>
-<div aria-live="polite" class="hidden rounded-2xl border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-950" id="barcodeAiResult"><div class="font-black"><i class="fa-solid fa-robot mr-1"></i> Gemini görsel incelemesi</div><pre class="mt-2 whitespace-pre-wrap break-words font-sans text-xs leading-relaxed" id="barcodeAiResultText"></pre><p class="mt-2 border-t border-indigo-200 pt-2 text-[10px] leading-relaxed">Bu sonuç görselde okunabilen yazıların tahmini yorumudur; resmî ürün kataloğu veya İTS doğrulaması değildir. Etken madde, doz ve ürün kimliğini kutu/prospektüs veya eczacıyla doğrulayın.</p></div>
+<div><h3 class="text-xs font-black text-navy-900"><i class="fa-solid fa-image mr-1.5 text-teal-700"></i>Fotoğraf Yükleme &amp; Yapay Zeka ile Kutu Tanıma</h3><p class="mt-1 text-[10px] leading-relaxed text-slate-500">Barkod okunamadığında veya alternatif olarak kutunun ön yüzünün fotoğrafını yükleyin; ürün adı ve içeriği yapay zeka / akıllı OCR ile tespit edilir.</p></div>
+<label class="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-teal-300 bg-teal-50 px-3 py-2.5 text-xs font-bold text-teal-900 hover:bg-teal-100"><i class="fa-solid fa-camera-retro"></i> Kutu Fotoğrafı Çek / Cihazdan Yükle<input accept="image/*" capture="environment" class="sr-only" id="barcodePhotoFile" onchange="handleBarcodePhotoSelected(event)" type="file"/></label>
+<img alt="Seçilen kutu fotoğrafı önizlemesi" class="hidden mx-auto max-h-64 max-w-full rounded-xl border border-slate-200 object-contain" id="barcodePhotoPreview"/>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-2"><button class="min-h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-800 hover:bg-slate-50" onclick="decodeBarcodeFromPhoto()" type="button"><i class="fa-solid fa-barcode mr-1"></i> Fotoğraftaki barkodu oku</button><button class="min-h-10 rounded-xl bg-indigo-700 px-3 py-2 text-xs font-black text-white hover:bg-indigo-800" id="barcodeAnalyzePhotoBtn" onclick="analyzeMedicationPhotoWithAI()" type="button"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Yapay Zeka (AI) ile Kutuyu Tanı</button></div>
+<label class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-[10px] leading-relaxed text-amber-950"><input checked="" class="mt-0.5 h-4 w-4 shrink-0 rounded border-amber-400 text-teal-600" id="barcodePhotoConsent" type="checkbox"/><span><strong>Fotoğraf analiz onayı:</strong> Seçtiğim kutu fotoğrafının ürün adını ve içeriğini tespit etmek amacıyla analiz edilmesini onaylıyorum. Fotoğrafa kişisel kimlik bilgisi eklemeyin.</span></label>
+<div aria-live="polite" class="hidden rounded-2xl border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-950" id="barcodeAiResult"><div class="font-black"><i class="fa-solid fa-robot mr-1"></i> Yapay Zeka Kutu &amp; İçerik Tanıma Sonucu</div><pre class="mt-2 whitespace-pre-wrap break-words font-sans text-xs leading-relaxed" id="barcodeAiResultText"></pre><p class="mt-2 border-t border-indigo-200 pt-2 text-[10px] leading-relaxed">Bu sonuç görselde okunabilen yazıların analizidir; etken madde, doz ve ürün kimliğini kutu/prospektüs veya eczacıyla doğrulayın.</p></div>
 </section>
-<div class="rounded-xl border border-amber-300 bg-amber-50 p-3 text-[10px] leading-relaxed text-amber-950"><strong><i class="fa-solid fa-triangle-exclamation mr-1"></i> Önemli:</strong> Barkod, önce NIH takviye etiket kataloğunda ve Open Food Facts açık ürün kataloğunda tam eşleşme ile aranır. Bu kataloglar bütün Türkiye ilaçlarını/takviyelerini kapsamaz ve resmî İTS sorgusu değildir. Ürün türü ilaç veya belirsizse takviye çizelgesine eklemeyin; eczacıyla doğrulayın. Eşleşme yoksa Gemini ile kutu fotoğrafındaki yazıları okuyabilirsiniz. Ürün/doz/orijinallik ve kişiye uygunluk yine kutu/prospektüs ve eczacı/hekimle doğrulanmalıdır.</div>
+<div class="rounded-xl border border-amber-300 bg-amber-50 p-3 text-[10px] leading-relaxed text-amber-950"><strong><i class="fa-solid fa-triangle-exclamation mr-1"></i> Önemli:</strong> Barkod önce <strong>Türkiye EAN-13 (869) Takviye &amp; İlaç Veritabanı</strong>, ardından NIH DSLD ve Open Food Facts kataloglarında aranır. <em>Takviye Ekle</em> modunda yalnızca vitamin ve gıda takviyeleri, <em>İlaç Seç ve Denetle</em> modunda ise genel/reçeteli ilaçlar eşleştirilir.</div>
 <div class="flex justify-end"><button class="min-h-10 rounded-xl bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700" onclick="closeBarcodeScannerModal()" type="button">Kapat</button></div>
 </div>
 </section>
