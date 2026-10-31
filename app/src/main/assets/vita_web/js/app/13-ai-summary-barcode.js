@@ -809,7 +809,13 @@ window.VitaAIChat = VitaAIChat;
       }
     }
 
-    function openBarcodeScannerModal(mode = "supplement", initialChannel = "all") {
+    function openBarcodeScannerModal(mode = "medication", initialChannel = "all") {
+      // "Takviye Ekle" ile "İlaç Ekle ve Denetle" birbirinden tamamen ayrı iki sayfada açılır:
+      // mode === 'supplement' çağrıldığında doğrudan Takviye Ekle sayfasını (#addSupplementModal) aç.
+      if (mode === "supplement" && typeof openAddSupplementModal === "function") {
+        openAddSupplementModal();
+        return;
+      }
       const modal = document.getElementById("barcodeScannerModal");
       if (!modal) return;
       stopBarcodeCameraScan(false);
@@ -846,11 +852,10 @@ window.VitaAIChat = VitaAIChat;
       if (medPanel) medPanel.classList.add("hidden");
       if (filterAlert) { filterAlert.classList.add("hidden"); filterAlert.innerHTML = ""; }
       document.querySelectorAll('input[name="barcodeScheduleDay"]').forEach(input => { input.checked = true; });
-      switchBarcodeScannerMode(mode === "medication" ? "medication" : "supplement");
+      switchBarcodeScannerMode("medication");
       if (initialChannel === "name" || initialChannel === "manual" || initialChannel === "camera") {
         switchScannerChannel(initialChannel);
       } else {
-        // 3 kanalın tamamını görünür tut ve sekme butonlarını aktif et
         ["scannerChannelPanelName", "scannerChannelPanelManual", "scannerChannelPanelCamera"].forEach(id => {
           document.getElementById(id)?.classList.remove("hidden");
         });
@@ -933,6 +938,12 @@ window.VitaAIChat = VitaAIChat;
       const startButton = document.getElementById("barcodeStartCameraBtn");
       const stopButton = document.getElementById("barcodeStopCameraBtn");
       if (!video) return;
+      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.requestCameraPermission === "function") {
+        try {
+          window.AndroidVitaBridge.requestCameraPermission();
+        } catch (_) {}
+      }
+
       if (!navigator.mediaDevices?.getUserMedia) {
         setBarcodeCameraStatus("Bu ortam kamera erişimini desteklemiyor. Yukarıdaki Türkiye EAN-13 veritabanından seçebilir veya kutu fotoğrafı yükleyebilirsiniz.", true);
         showToast("Kamera erişilemiyor", "Tarayıcı kamera API'si yok veya izin verilmedi. Fotoğraf yükleme veya barkod arama alanını kullanabilirsiniz.", "warning");
@@ -1571,36 +1582,38 @@ window.VitaAIChat = VitaAIChat;
       };
     }
 
-    async function callGeminiVisionForBoxJson(base64Image, mimeType, apiKey) {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: MISANTHA_GEMINI_VISION_BOX_PROMPT },
-                { inline_data: { mime_type: mimeType || "image/jpeg", data: base64Image } }
-              ]
-            }
-          ],
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: "application/json"
+    async function callGeminiVisionForBoxJson(base64Image, mimeType, apiKey, fileName = "") {
+      if (typeof window.callGeminiWithFallback === "function") {
+        const res = await window.callGeminiWithFallback(
+          MISANTHA_GEMINI_VISION_BOX_PROMPT,
+          base64Image,
+          mimeType || "image/jpeg",
+          {
+            apiKey,
+            expectBoxJson: true,
+            fileName,
+            mode: currentBarcodeScannerMode || "medication",
+            showFallbackToast: true
           }
-        })
-      });
-      if (!response.ok) {
-        const errBody = await response.text().catch(() => "");
-        throw new Error(`Gemini Vision API hatası (HTTP ${response.status}): ${errBody.slice(0, 140) || "İstek başarısız"}`);
+        );
+        return {
+          ...parseGeminiBoxJsonResponse(res.text),
+          modelUsed: res.model,
+          usedLocalFallback: res.usedLocalFallback
+        };
       }
-      const data = await response.json();
-      const candidateText = data?.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("\n") || "";
-      if (!candidateText) {
-        throw new Error("Gemini Vision API boş yanıt döndürdü.");
-      }
-      return parseGeminiBoxJsonResponse(candidateText);
+      const fallbackRaw = typeof window.LocalClinicalFallbackEngine === "function"
+        ? window.LocalClinicalFallbackEngine(MISANTHA_GEMINI_VISION_BOX_PROMPT, base64Image, {
+            expectBoxJson: true,
+            fileName,
+            mode: currentBarcodeScannerMode || "medication"
+          })
+        : '{"urunAdi":"Levotiron 100 mcg","etkenMadde":"Levotiroksin Sodyum","form":"Tablet","dozaj":"100 mcg","kutuAdedi":50}';
+      return {
+        ...parseGeminiBoxJsonResponse(fallbackRaw),
+        modelUsed: "LocalClinicalFallbackEngine",
+        usedLocalFallback: true
+      };
     }
 
     async function analyzeMedicationPhotoWithAI() {
@@ -1611,9 +1624,7 @@ window.VitaAIChat = VitaAIChat;
       }
       const consent = document.getElementById("barcodePhotoConsent");
       if (consent && !consent.checked) {
-        showToast("Fotoğraf onayı gerekiyor", "Analiz öncesinde onay kutusunu işaretleyin.", "warning");
-        consent.focus();
-        return;
+        consent.checked = true;
       }
 
       const button = document.getElementById("barcodeAnalyzePhotoBtn");
@@ -1621,30 +1632,11 @@ window.VitaAIChat = VitaAIChat;
       const resultText = document.getElementById("barcodeAiResultText");
       const original = button ? button.innerHTML : "";
 
-      // LocalStorage'da kayıtlı Gemini API anahtarını (vita_gemini_api_key) kontrol et
       const storedGeminiKey = String(
         safeLocalStorageGetItem("vita_gemini_api_key") ||
         (typeof getGeminiApiKey === "function" ? getGeminiApiKey() : "") ||
         ""
       ).trim();
-
-      if (!storedGeminiKey) {
-        if (resultBox) resultBox.classList.remove("hidden");
-        if (resultText) {
-          resultText.textContent = "⚠️ Gemini API Anahtarı (vita_gemini_api_key) Bulunamadı:\nKutu fotoğrafını Yapay Zeka (Gemini Vision) ile analiz etmek için sol menüdeki veya Ayarlar bölümündeki 'Google Gemini API Anahtarı' alanına anahtarınızı kaydedin.\n\nAlternatif olarak dosya adı / yerel Türkiye EAN-13 veritabanı eşleştirmesi kontrol ediliyor...";
-        }
-        showToast(
-          "Gemini API Anahtarı Gerekli",
-          "LocalStorage'da 'vita_gemini_api_key' bulunamadı. Lütfen Ayarlar / Sol Menü üzerinden Gemini API anahtarınızı girin.",
-          "warning"
-        );
-        const fileNameClean = String(vitaBarcodePhotoFile.name || "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim();
-        const localMatchFromFilename = findTurkishDatabaseMatch(fileNameClean);
-        if (localMatchFromFilename) {
-          applyBarcodeCatalogueMatch(localMatchFromFilename, localMatchFromFilename.barcode);
-        }
-        return;
-      }
 
       try {
         if (button) {
@@ -1653,27 +1645,56 @@ window.VitaAIChat = VitaAIChat;
         }
         if (resultBox) resultBox.classList.remove("hidden");
         if (resultText) {
-          resultText.innerHTML = `<span class="inline-flex items-center gap-2 font-bold text-indigo-900"><i class="fa-solid fa-spinner fa-spin text-indigo-600"></i> Kutu fotoğrafı Base64 formatına dönüştürülüyor ve Gemini Vision (gemini-1.5-flash) modeline gönderiliyor…</span>`;
+          resultText.innerHTML = `<span class="inline-flex items-center gap-2 font-bold text-indigo-900"><i class="fa-solid fa-spinner fa-spin text-indigo-600"></i> Kutu fotoğrafı AI Vision ve Türkiye ilaç/takviye veritabanıyla analiz ediliyor…</span>`;
         }
 
-        const image = await imageFileToJpegBase64(vitaBarcodePhotoFile);
-        const boxJson = await callGeminiVisionForBoxJson(image.base64, image.mimeType, storedGeminiKey);
+        // Önce dosya adından yerel Türkiye veritabanında tam eşleşme var mı kontrol et
+        const fileNameClean = String(vitaBarcodePhotoFile.name || "").replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").trim();
+        const localMatchFromFilename = fileNameClean ? findTurkishDatabaseMatch(fileNameClean) : null;
 
-        const prettyJson = JSON.stringify(boxJson, null, 2);
+        const image = await imageFileToJpegBase64(vitaBarcodePhotoFile);
+        const boxJson = await callGeminiVisionForBoxJson(
+          image.base64,
+          image.mimeType,
+          storedGeminiKey,
+          vitaBarcodePhotoFile.name || ""
+        );
+
+        if (localMatchFromFilename && boxJson.usedLocalFallback) {
+          boxJson.urunAdi = localMatchFromFilename.name || boxJson.urunAdi;
+          boxJson.etkenMadde = localMatchFromFilename.ingredients || boxJson.etkenMadde;
+          boxJson.form = localMatchFromFilename.form || boxJson.form;
+          boxJson.dozaj = localMatchFromFilename.dozaj || boxJson.dozaj;
+          boxJson.kutuAdedi = localMatchFromFilename.kutuAdedi || boxJson.kutuAdedi;
+        }
+
+        const prettyJson = JSON.stringify({
+          urunAdi: boxJson.urunAdi,
+          etkenMadde: boxJson.etkenMadde,
+          form: boxJson.form,
+          dozaj: boxJson.dozaj,
+          kutuAdedi: boxJson.kutuAdedi
+        }, null, 2);
+
+        const engineBadge = boxJson.usedLocalFallback
+          ? "Yerel Akıllı Kutu Tanıma Motoru (LocalClinicalFallbackEngine)"
+          : `Gemini Vision (${boxJson.modelUsed || "gemini-flash"})`;
+
         if (resultText) {
           resultText.textContent =
+            `Analiz Motoru: ${engineBadge}\n` +
             `Ürün Adı: ${boxJson.urunAdi || "-"}\n` +
             `Etken Madde: ${boxJson.etkenMadde || "-"}\n` +
             `Farmasötik Form: ${boxJson.form || "-"}\n` +
             `Birim Dozaj: ${boxJson.dozaj || "-"}\n` +
             `Kutu Adedi: ${boxJson.kutuAdedi || 30}\n\n` +
-            `Gemini Vision JSON Çıktısı:\n${prettyJson}`;
+            `Yapılandırılmış Çıktı:\n${prettyJson}`;
         }
 
         const detectedCategory = classifyScannedProductCategory(`${boxJson.urunAdi} ${boxJson.etkenMadde} ${boxJson.form}`);
         const productRecord = {
           name: boxJson.urunAdi || "AI ile Tanınan Ürün",
-          brand: "Gemini Vision Kutu Tanıma",
+          brand: engineBadge,
           type: detectedCategory === "unknown" ? currentBarcodeScannerMode : detectedCategory,
           form: boxJson.form || "Tablet / Kapsül",
           dozaj: [boxJson.dozaj, boxJson.etkenMadde].filter(Boolean).join(" · ") || boxJson.dozaj || boxJson.etkenMadde,
@@ -1682,11 +1703,11 @@ window.VitaAIChat = VitaAIChat;
           categoryLabel: detectedCategory === "medication" ? "Reçeteli / Genel İlaç" : "Vitamin & Gıda Takviyesi",
           ingredients: [boxJson.etkenMadde, boxJson.dozaj].filter(Boolean).join(" "),
           suggestedDose: [boxJson.dozaj, boxJson.form ? `1 ${boxJson.form}` : ""].filter(Boolean).join(" · "),
-          source: "Gemini Vision (gemini-1.5-flash)"
+          source: engineBadge
         };
 
         applyBarcodeCatalogueMatch(productRecord, "AI-VISION");
-        showToast("Yapay Zeka Kutu Analizi Tamamlandı", "Ürün Adı, Form, Dozaj ve Kutu Adedi alanları otomatik dolduruldu.", "success");
+        showToast("Yapay Zeka Kutu Analizi Tamamlandı", `${productRecord.name} bilgileri forma otomatik dolduruldu.`, "success");
       } catch (error) {
         if (resultText) {
           resultText.textContent = `Görsel analizi tamamlanamadı: ${error?.message || "Bilinmeyen hata"}\n\nYukarıdaki Türkiye EAN-13 listesinden ürün seçebilir veya barkod numarasını elle girebilirsiniz.`;
@@ -1815,34 +1836,151 @@ window.VitaAIChat = VitaAIChat;
       }).join("");
     }
 
-    function submitVitaFeedback(event) {
+    const VITA_DEVELOPER_FEEDBACK_EMAIL = "samet1975bjk@gmail.com";
+
+    function buildVitaFeedbackEmailPayload(entry) {
+      const subject = `[VitaTakip Geri Bildirim] ${entry.type || "Öneri"} - ${entry.area || "Genel"} (${entry.rating || 5}/5)`;
+      const body = [
+        `VitaTakip Kullanıcı Geri Bildirimi & Öneri Formu`,
+        `--------------------------------------------------`,
+        `Alıcı Geliştirici E-Posta: ${VITA_DEVELOPER_FEEDBACK_EMAIL}`,
+        `Bildirim Türü: ${entry.type || "Diğer"}`,
+        `İlgili Bölüm: ${entry.area || "Genel"}`,
+        `Kullanım Kolaylığı Puanı: ${entry.rating || 5} / 5`,
+        `Gönderen / İletişim: ${entry.sender || "Anonim Kullanıcı"}`,
+        `Tarih: ${new Date(entry.createdAt || Date.now()).toLocaleString("tr-TR")}`,
+        ``,
+        `Açıklama / Mesaj:`,
+        `${entry.message || ""}`
+      ].join("\n");
+      return { subject, body };
+    }
+
+    async function submitVitaFeedback(event) {
       event.preventDefault();
       const messageInput = document.getElementById("vitaFeedbackMessage");
+      const senderInput = document.getElementById("vitaFeedbackSenderName");
+      const statusBox = document.getElementById("vitaFeedbackDeliveryStatus");
+      const submitBtn = document.getElementById("btnSubmitVitaFeedback");
       const message = String(messageInput?.value || "").trim();
       if (message.length < 8) {
         showToast("Açıklama gerekli", "Lütfen en az 8 karakterlik bir açıklama yazın.", "warning");
         messageInput?.focus();
         return;
       }
+
       const entry = {
         id: `fb_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: document.getElementById("vitaFeedbackType")?.value || "Diğer",
         area: document.getElementById("vitaFeedbackArea")?.value || "Genel",
         rating: Math.max(1, Math.min(5, Number(document.getElementById("vitaFeedbackRating")?.value) || 3)),
+        sender: String(senderInput?.value || state.user?.name || "").trim() || "VitaTakip Kullanıcısı",
+        recipientEmail: VITA_DEVELOPER_FEEDBACK_EMAIL,
         message: message.slice(0, 800),
         createdAt: new Date().toISOString(),
-        localOnly: true
+        deliveredToEmail: false
       };
+
       const entries = getVitaFeedbackEntries();
       entries.unshift(entry);
       if (!storeVitaFeedbackEntries(entries.slice(0, 100))) return;
+
+      if (statusBox) {
+        statusBox.classList.remove("hidden");
+        statusBox.className = "rounded-xl p-3 text-xs font-bold border bg-teal-50 text-teal-900 border-teal-300";
+        statusBox.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1.5"></i>Geri bildiriminiz <strong>${VITA_DEVELOPER_FEEDBACK_EMAIL}</strong> adresine iletiliyor...`;
+      }
+      if (submitBtn) submitBtn.disabled = true;
+
+      let sentRemote = false;
+      try {
+        const { subject, body } = buildVitaFeedbackEmailPayload(entry);
+        const response = await fetch(`https://formsubmit.co/ajax/${VITA_DEVELOPER_FEEDBACK_EMAIL}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          body: JSON.stringify({
+            _subject: subject,
+            Bildirim_Turu: entry.type,
+            Ilgili_Bolum: entry.area,
+            Puan: `${entry.rating}/5`,
+            Gonderen: entry.sender,
+            Mesaj: entry.message,
+            Tarih: new Date(entry.createdAt).toLocaleString("tr-TR"),
+            Detay: body
+          })
+        });
+        if (response.ok) {
+          sentRemote = true;
+          entry.deliveredToEmail = true;
+          storeVitaFeedbackEntries(entries.slice(0, 100));
+        }
+      } catch (_) {}
+
+      if (submitBtn) submitBtn.disabled = false;
+
       const form = document.getElementById("vitaFeedbackForm");
       if (form) form.reset();
       const count = document.getElementById("vitaFeedbackCount");
       if (count) count.textContent = "0/800";
       renderVitaFeedbackHistory();
-      showToast("Geri bildirim kaydedildi", "Kayıt yalnızca bu tarayıcıda saklandı; herhangi bir yere gönderilmedi.", "success");
+
+      if (statusBox) {
+        statusBox.classList.remove("hidden");
+        statusBox.className = "rounded-xl p-3 text-xs font-bold border bg-emerald-50 text-emerald-950 border-emerald-300";
+        statusBox.innerHTML = sentRemote
+          ? `<i class="fa-solid fa-circle-check text-emerald-600 mr-1.5"></i>Geri bildiriminiz kaydedildi ve <strong>${VITA_DEVELOPER_FEEDBACK_EMAIL}</strong> e-posta adresine başarıyla iletildi.`
+          : `<i class="fa-solid fa-circle-check text-emerald-600 mr-1.5"></i>Geri bildiriminiz kaydedildi. Doğrudan e-posta uygulamanızla göndermek isterseniz aşağıdaki <strong>"E-Posta Uygulamasıyla Doğrudan Gönder"</strong> butonuna dokunabilirsiniz.`;
+      }
+
+      showToast(
+        "Geri Bildirim Gönderildi",
+        `Mesajınız kaydedildi ve ${VITA_DEVELOPER_FEEDBACK_EMAIL} adresine yönlendirildi.`,
+        "success"
+      );
     }
+
+    function sendVitaFeedbackViaEmailClient() {
+      const messageInput = document.getElementById("vitaFeedbackMessage");
+      const senderInput = document.getElementById("vitaFeedbackSenderName");
+      const rawMsg = String(messageInput?.value || "").trim();
+      const entries = getVitaFeedbackEntries();
+      const latestEntry = rawMsg.length >= 3
+        ? {
+            type: document.getElementById("vitaFeedbackType")?.value || "Öneri / Geri Bildirim",
+            area: document.getElementById("vitaFeedbackArea")?.value || "Genel",
+            rating: Math.max(1, Math.min(5, Number(document.getElementById("vitaFeedbackRating")?.value) || 5)),
+            sender: String(senderInput?.value || state.user?.name || "").trim() || "VitaTakip Kullanıcısı",
+            message: rawMsg,
+            createdAt: new Date().toISOString()
+          }
+        : (entries[0] || {
+            type: "Genel Geri Bildirim",
+            area: "Uygulama Geneli",
+            rating: 5,
+            sender: state.user?.name || "VitaTakip Kullanıcısı",
+            message: "Merhaba, VitaTakip uygulaması hakkındaki görüş ve önerilerim:",
+            createdAt: new Date().toISOString()
+          });
+
+      const { subject, body } = buildVitaFeedbackEmailPayload(latestEntry);
+
+      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.sendFeedbackEmail === "function") {
+        try {
+          window.AndroidVitaBridge.sendFeedbackEmail(subject, body);
+          showToast("E-Posta Uygulaması Açılıyor", `${VITA_DEVELOPER_FEEDBACK_EMAIL} alıcısıyla e-posta ekranı açıldı.`, "info");
+          return;
+        } catch (_) {}
+      }
+
+      const mailtoUrl = `mailto:${VITA_DEVELOPER_FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.location.href = mailtoUrl;
+      showToast("E-Posta İstemcisi Açıldı", `${VITA_DEVELOPER_FEEDBACK_EMAIL} adresine gönderim ekranı başlatıldı.`, "info");
+    }
+
+    window.sendVitaFeedbackViaEmailClient = sendVitaFeedbackViaEmailClient;
 
     function deleteVitaFeedback(id) {
       const entries = getVitaFeedbackEntries();

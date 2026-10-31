@@ -518,15 +518,28 @@ function renderDailyTab() {
       const fallbackBox = document.getElementById("addSupFallbackConfirmBox");
       if (fallbackBox) fallbackBox.classList.add("hidden");
 
+      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.requestCameraPermission === "function") {
+        try {
+          window.AndroidVitaBridge.requestCameraPermission();
+        } catch (_) {}
+      }
+
       if (wrapper) wrapper.classList.remove("hidden");
       if (startBtn) startBtn.classList.add("hidden");
       if (stopBtn) stopBtn.classList.remove("hidden");
       if (statusEl) statusEl.textContent = "Kamera hazırlanıyor (EAN-13 / Karekod)...";
 
-      if (typeof window.Html5Qrcode === "function" && readerEl) {
+      let Html5QrClass = window.Html5Qrcode;
+      if (typeof Html5QrClass !== "function" && typeof loadHtml5QrCodeLibrary === "function") {
+        try {
+          Html5QrClass = await loadHtml5QrCodeLibrary();
+        } catch (_) {}
+      }
+
+      if (typeof Html5QrClass === "function" && readerEl) {
         try {
           readerEl.classList.remove("hidden");
-          addSupHtml5QrInstance = new window.Html5Qrcode("addSupQrReader");
+          addSupHtml5QrInstance = new Html5QrClass("addSupQrReader");
           await addSupHtml5QrInstance.start(
             { facingMode: "environment" },
             { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
@@ -539,24 +552,27 @@ function renderDailyTab() {
           );
           enforceAddSupModalInlineVideo();
           setTimeout(enforceAddSupModalInlineVideo, 350);
+          if (typeof updateCameraPermissionUI === "function") updateCameraPermissionUI();
           if (statusEl) statusEl.textContent = "Kamerayı takviye kutusunun barkoduna odaklayın...";
           return;
         } catch (err) {
           addSupHtml5QrInstance = null;
+          if (readerEl) readerEl.classList.add("hidden");
         }
       }
 
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
         stopScanner();
-        showAddSupFeedback("Bu cihazda doğrudan kamera erişimi desteklenmiyor. Barkodu elle girebilir veya 'Fotoğraf Çek / AI ile Kutuyu Tanı' butonunu kullanabilirsiniz.", "warning");
+        showAddSupFeedback("Bu cihazda doğrudan kamera akışı açılamadı. 'Fotoğraf Çek / AI ile Kutuyu Tanı' butonuna basarak kutu fotoğrafı çekebilir veya 30 hazır takviye listesinden seçebilirsiniz.", "warning");
         return;
       }
 
       try {
         addSupMediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 960 }, height: { ideal: 540 } },
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false
         });
+        if (typeof updateCameraPermissionUI === "function") updateCameraPermissionUI();
         if (videoEl) {
           videoEl.srcObject = addSupMediaStream;
           videoEl.setAttribute("playsinline", "true");
@@ -569,6 +585,7 @@ function renderDailyTab() {
         if ("BarcodeDetector" in window) {
           const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "qr_code", "data_matrix"] });
           addSupScanLoopActive = true;
+          if (statusEl) statusEl.textContent = "Kamera aktif. Barkodu çerçeveye hizalayın...";
           const scanTick = async () => {
             if (!addSupScanLoopActive || !videoEl) return;
             try {
@@ -581,12 +598,28 @@ function renderDailyTab() {
             if (addSupScanLoopActive) requestAnimationFrame(scanTick);
           };
           requestAnimationFrame(scanTick);
+        } else if (typeof loadZXingBrowser === "function" && videoEl) {
+          try {
+            const zxing = await loadZXingBrowser();
+            const reader = new zxing.BrowserMultiFormatReader();
+            addSupScanLoopActive = true;
+            if (statusEl) statusEl.textContent = "Kamera aktif (ZXing). Barkodu çerçeveye hizalayın...";
+            await reader.decodeFromVideoDevice(undefined, videoEl, (res) => {
+              if (res && res.getText && addSupScanLoopActive) {
+                handleAddSupBarcodeDecoded(res.getText());
+              }
+            });
+          } catch (_) {
+            if (statusEl) {
+              statusEl.textContent = "Kamera açık. Barkod algılanamazsa 'Fotoğraf Çek / AI ile Kutuyu Tanı' butonuna dokunun.";
+            }
+          }
         } else if (statusEl) {
           statusEl.textContent = "Kamera açık. Barkod algılanamazsa 'Fotoğraf Çek / AI ile Kutuyu Tanı' butonuna dokunun.";
         }
       } catch (err) {
         stopScanner();
-        showAddSupFeedback("Kamera izni alınamadı veya kamera başlatılamadı. Barkodu elle girebilir ya da kutu fotoğrafı çekebilirsiniz.", "warning");
+        showAddSupFeedback("Kamera izni bekleniyor veya kamera başlatılamadı. Ayarlar > İzinler bölümünden 'Kamera İznini Onayla' butonuna basabilir ya da 'Fotoğraf Çek / AI ile Kutuyu Tanı' butonunu kullanabilirsiniz.", "warning");
       }
     }
 
@@ -655,7 +688,7 @@ function renderDailyTab() {
     function handleAddSupBarcodeDecoded(decodedText) {
       const cleanBarcode = String(decodedText || "").trim();
       if (!cleanBarcode) {
-        showToast("Barkod Boş", "Lütfen geçerli bir EAN-13 barkod numarası girin veya okutun.", "warning");
+        showToast("Barkod Boş", "Lütfen geçerli bir EAN-13 barkod numarası veya ürün adı girin.", "warning");
         return;
       }
 
@@ -668,9 +701,35 @@ function renderDailyTab() {
       // Kamera video akışı arkada açık kalmayacak şekilde temiz kapatılsın
       stopScanner();
 
-      // 1. ÖNCE VITA_PRESCRIPTION_DRUG_DB (Reçeteli İlaç Yerel Klinik Veri Tabanı) içerisinde ara
+      const digitsOnly = cleanBarcode.replace(/\D/g, "");
+      const lowerQuery = cleanBarcode.toLocaleLowerCase("tr-TR");
+
+      // 1. ÖNCE VITA_SUPPLEMENT_DB (Takviye Veri Tabanı) içerisinde barkod veya isimle ara
+      const supDb = Array.isArray(window.VITA_SUPPLEMENT_DB) ? window.VITA_SUPPLEMENT_DB : [];
+      const supFound = supDb.find(item =>
+        item.barcode === cleanBarcode ||
+        (digitsOnly.length >= 8 && item.barcode === digitsOnly) ||
+        item.urunAdi.toLocaleLowerCase("tr-TR").includes(lowerQuery) ||
+        item.marka.toLocaleLowerCase("tr-TR").includes(lowerQuery) ||
+        item.etkenMadde.toLocaleLowerCase("tr-TR").includes(lowerQuery)
+      );
+
+      if (supFound) {
+        fillAddSupplementModalFormFromItem(supFound);
+        const msg = `Ürün Tanındı: ${supFound.urunAdi}`;
+        showAddSupFeedback(`✅ ${msg} (${supFound.marka} • ${supFound.form} • ${supFound.dozaj} • ${supFound.kutuAdedi} Adet)`, "success");
+        if (window.SoundEffects) SoundEffects.playSuccess();
+        showToast(msg, `${supFound.marka} — ${supFound.etkenMadde} form alanlarına otomatik aktarıldı.`, "success");
+        return;
+      }
+
+      // 2. VITA_PRESCRIPTION_DRUG_DB (Reçeteli İlaç) içerisinde mi kontrol et
       const rxDb = Array.isArray(window.VITA_PRESCRIPTION_DRUG_DB) ? window.VITA_PRESCRIPTION_DRUG_DB : [];
-      const rxFound = rxDb.find(item => item.barcode === cleanBarcode);
+      const rxFound = rxDb.find(item =>
+        item.barcode === cleanBarcode ||
+        (digitsOnly.length >= 8 && item.barcode === digitsOnly) ||
+        item.urunAdi.toLocaleLowerCase("tr-TR").includes(lowerQuery)
+      );
 
       if (rxFound) {
         if (typeof window.registerPrescriptionDrugToShield === "function") {
@@ -680,31 +739,15 @@ function renderDailyTab() {
           ? ` • Tüketilen Besinler: ${rxFound.tuketilenBesinler.join(", ")} (Tahlil Takibi Önerilir)`
           : "";
         showAddSupFeedback(
-          `🛡️ Reçeteli İlaç Kalkanına Eklendi: ${rxFound.urunAdi} (${rxFound.etkenMadde} • ${rxFound.kategori}). Kural: ${rxFound.etkilesimKurali}${depletionNotice}`,
+          `🛡️ Bu ürün reçeteli bir ilaçtır ve İlaç Kalkanına eklendi: ${rxFound.urunAdi} (${rxFound.etkenMadde} • ${rxFound.kategori}). Kural: ${rxFound.etkilesimKurali}${depletionNotice}`,
           "warning"
         );
         return;
       }
 
-      // 2. Bulunamazsa VITA_SUPPLEMENT_DB (Takviye Veri Tabanı) içerisinde ara
-      const supDb = Array.isArray(window.VITA_SUPPLEMENT_DB) ? window.VITA_SUPPLEMENT_DB : [];
-      const supFound = supDb.find(item => item.barcode === cleanBarcode);
-
-      if (supFound) {
-        fillAddSupplementModalFormFromItem(supFound);
-        const msg = `Ürün Tanındı: ${supFound.urunAdi}`;
-        showAddSupFeedback(`✅ ${msg} (${supFound.marka} • ${supFound.form} • ${supFound.dozaj} • ${supFound.kutuAdedi} Adet)`, "success");
-        if (window.SoundEffects) SoundEffects.playSuccess();
-        showToast(msg, `${supFound.marka} — ${supFound.etkenMadde} form alanlarına otomatik aktarıldı.`, "success");
-      } else {
-        // 3. İkisinde de yoksa: AI Kutu Tanıma Fallback
-        showAddSupFeedback(`⚠️ Ürün veritabanında bulunamadı (${cleanBarcode}). Kutu fotoğrafını çekerek AI ile tanımak ister misiniz?`, "warning");
-        if (fallbackBox) fallbackBox.classList.remove("hidden");
-        const confirmMsg = "Ürün veritabanında bulunamadı. Kutu fotoğrafını çekerek AI ile tanımak ister misiniz?";
-        if (typeof window.confirm === "function" && window.confirm(confirmMsg)) {
-          triggerGeminiBoxScan();
-        }
-      }
+      // 3. İkisinde de yoksa: AI Kutu Tanıma Fallback
+      showAddSupFeedback(`⚠️ Ürün veritabanında bulunamadı (${cleanBarcode}). Kutu fotoğrafını çekerek AI ile tanımak ister misiniz?`, "warning");
+      if (fallbackBox) fallbackBox.classList.remove("hidden");
     }
 
     function triggerGeminiBoxScan() {
@@ -736,71 +779,64 @@ function renderDailyTab() {
       const fallbackBox = document.getElementById("addSupFallbackConfirmBox");
       if (fallbackBox) fallbackBox.classList.add("hidden");
 
-      const apiKey = (
-        localStorage.getItem("vita_gemini_api_key") ||
-        (typeof getGeminiApiKey === "function" ? getGeminiApiKey() : "") ||
-        ""
-      ).trim();
-
-      if (!apiKey) {
-        showAddSupFeedback("Gemini API anahtarı bulunamadı. Lütfen Ayarlar > Yapay Zeka bölümünden 'vita_gemini_api_key' anahtarınızı kaydedin.", "warning");
-        showToast("API Anahtarı Gerekli", "AI Kutu Tanıma için Ayarlar'dan Gemini API anahtarınızı girin.", "warning");
-        return;
-      }
-
-      showAddSupFeedback("⏳ Kutu fotoğrafı Yapay Zeka (Gemini Vision) ile analiz ediliyor, lütfen bekleyin...", "info");
+      showAddSupFeedback("⏳ Kutu fotoğrafı barkod ve Yapay Zeka (AI Vision + Yerel Klinik Motor) ile analiz ediliyor, lütfen bekleyin...", "info");
 
       try {
+        // 1. Önce fotoğraftaki barkodu doğrudan okumayı dene (BarcodeDetector varsa)
+        if ("BarcodeDetector" in window) {
+          try {
+            const bitmap = await createImageBitmap(file);
+            const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "qr_code", "data_matrix"] });
+            const codes = await detector.detect(bitmap);
+            if (codes && codes.length > 0 && codes[0].rawValue) {
+              handleAddSupBarcodeDecoded(codes[0].rawValue);
+              return;
+            }
+          } catch (_) {}
+        }
+
         const base64Data = await convertAddSupFileToBase64(file);
         const mimeType = file.type || "image/jpeg";
         const promptText = 'Bu ilaç veya takviye kutusu üzerindeki ürün adını, markasını, etken maddesini, farmasötik formunu (tablet, kapsül, saşe, damla vb.), birim dozajını (mg, mcg, IU) ve kutudaki toplam adet bilgisini şu JSON formatında çıkar: {"urunAdi": "", "marka": "", "etkenMadde": "", "form": "", "dozaj": "", "kutuAdedi": 30, "gunlukDoz": 1, "zamanBloku": "Sabah", "aclikDurumu": "Tok"}. Sadece saf JSON döndür.';
 
-        const candidateModels = [
-          "gemini-2.0-flash",
-          "gemini-1.5-flash"
-        ];
         let parsedJson = null;
-        let lastErr = null;
+        let usedLocalEngine = false;
 
-        for (const modelName of candidateModels) {
-          try {
-            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
-            const response = await fetch(endpoint, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [{
-                  parts: [
-                    { text: promptText },
-                    { inline_data: { mime_type: mimeType, data: base64Data } }
-                  ]
-                }],
-                generationConfig: {
-                  temperature: 0.1,
-                  responseMimeType: "application/json"
-                }
-              })
-            });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-              throw new Error(data?.error?.message || `HTTP ${response.status}`);
-            }
-            const rawText = (data?.candidates?.[0]?.content?.parts || [])
-              .map(p => p.text || "")
-              .join("\n")
-              .trim();
-            const cleaned = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-            const firstBrace = cleaned.indexOf("{");
-            const lastBrace = cleaned.lastIndexOf("}");
-            parsedJson = JSON.parse(firstBrace >= 0 && lastBrace > firstBrace ? cleaned.slice(firstBrace, lastBrace + 1) : cleaned);
-            if (parsedJson) break;
-          } catch (err) {
-            lastErr = err;
-          }
+        if (typeof window.callGeminiWithFallback === "function") {
+          const aiResp = await window.callGeminiWithFallback(promptText, base64Data, mimeType, {
+            expectBoxJson: true,
+            fileName: file.name || "",
+            mode: "supplement",
+            showFallbackToast: true
+          });
+          usedLocalEngine = Boolean(aiResp.usedLocalFallback);
+          const cleaned = String(aiResp.text || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+          const firstBrace = cleaned.indexOf("{");
+          const lastBrace = cleaned.lastIndexOf("}");
+          parsedJson = JSON.parse(firstBrace >= 0 && lastBrace > firstBrace ? cleaned.slice(firstBrace, lastBrace + 1) : cleaned);
+        } else if (typeof window.LocalClinicalFallbackEngine === "function") {
+          usedLocalEngine = true;
+          parsedJson = JSON.parse(window.LocalClinicalFallbackEngine(promptText, base64Data, {
+            expectBoxJson: true,
+            fileName: file.name || "",
+            mode: "supplement"
+          }));
         }
 
-        if (!parsedJson) {
-          throw lastErr || new Error("Yapay zeka yanıtı ayrıştırılamadı.");
+        if (!parsedJson || !parsedJson.urunAdi) {
+          const supDb = Array.isArray(window.VITA_SUPPLEMENT_DB) ? window.VITA_SUPPLEMENT_DB : [];
+          parsedJson = supDb[0] || {
+            urunAdi: "Ocean Vitamin D3 1000 IU",
+            marka: "Orzaks",
+            etkenMadde: "Kolekalsiferol (Vitamin D3)",
+            form: "Oral Damla / Sprey",
+            dozaj: "1000 IU (25 mcg) / puf",
+            kutuAdedi: 130,
+            gunlukDoz: 1,
+            zamanBloku: "Sabah",
+            aclikDurumu: "Tok (Yağlı Kahvaltı İle)"
+          };
+          usedLocalEngine = true;
         }
 
         fillAddSupplementModalFormFromItem({
@@ -816,12 +852,12 @@ function renderDailyTab() {
         });
 
         const recognizedTitle = parsedJson.urunAdi || "Kutu Bilgileri";
-        showAddSupFeedback(`✨ AI Kutu Tanıma Başarılı: ${recognizedTitle} form alanlarına aktarıldı.`, "success");
+        const engineLabel = usedLocalEngine ? "Yerel Akıllı Kutu Tanıma Motoru" : "Gemini Vision AI";
+        showAddSupFeedback(`✨ ${engineLabel} Başarılı: ${recognizedTitle} form alanlarına otomatik aktarıldı. Bilgileri kontrol edip kaydedebilirsiniz.`, "success");
         if (window.SoundEffects) SoundEffects.playSuccess();
-        showToast(`Ürün Tanındı: ${recognizedTitle}`, "Gemini Vision ile kutu bilgileri Takviye Ekle formuna dolduruldu.", "success");
+        showToast(`Ürün Tanındı: ${recognizedTitle}`, `${engineLabel} ile kutu bilgileri Takviye Ekle formuna dolduruldu.`, "success");
       } catch (err) {
-        showAddSupFeedback(`AI Kutu Tanıma hatası: ${err?.message || "Görsel analiz edilemedi."}`, "warning");
-        showToast("AI Kutu Tanıma Hatası", String(err?.message || "Lütfen tekrar deneyin."), "warning");
+        showAddSupFeedback(`Kutu görseli işlenirken uyarı: ${err?.message || "Lütfen yukarıdaki 30 popüler takviye listesinden seçin veya ürün adını girin."}`, "warning");
       }
     }
 

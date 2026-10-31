@@ -1016,6 +1016,7 @@ let currentAuthMode = "login";
       if (window.SoundEffects) SoundEffects.playClick();
       cloudSyncModalOrigin = origin;
       if (typeof closeHeaderProfileMenu === "function") closeHeaderProfileMenu();
+      if (typeof closeAppDrawer === "function") closeAppDrawer();
       const modal = document.getElementById("cloudSyncModal");
       if (!modal) return;
       setCloudSyncModalFeedback("");
@@ -1031,14 +1032,20 @@ let currentAuthMode = "login";
         emailInput.value = (acc && acc.connected && acc.email) ? acc.email : "";
       }
       refreshCloudSyncUI();
+      document.body.classList.add("vita-cloud-modal-open");
       modal.classList.remove("hidden");
+      modal.classList.add("active");
+      modal.setAttribute("aria-hidden", "false");
       modal.style.display = "flex";
     }
 
     function closeCloudSyncModal() {
+      document.body.classList.remove("vita-cloud-modal-open");
       const modal = document.getElementById("cloudSyncModal");
       if (modal) {
         modal.classList.add("hidden");
+        modal.classList.remove("active");
+        modal.setAttribute("aria-hidden", "true");
         modal.style.display = "none";
       }
     }

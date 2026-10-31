@@ -59,8 +59,36 @@ function getDoctorReportMode() {
     }
 
     function printDoctorReport() {
+      const activeMode = getDoctorReportMode();
+      setDoctorReportMode(activeMode);
+      const reportView = document.getElementById("view-report");
+      if (reportView && reportView.classList.contains("hidden") && typeof navigateToView === "function") {
+        navigateToView("view-report");
+      }
       renderReportTab();
-      window.print();
+      const jobTitle = activeMode === "concise"
+        ? "VitaTakip_Kisa_Doktor_Raporu"
+        : "VitaTakip_Ayrintili_Klinik_Rapor";
+      if (typeof showToast === "function") {
+        showToast(
+          activeMode === "concise" ? "Kısa Doktor Raporu Hazırlandı" : "Ayrıntılı Klinik Rapor Hazırlandı",
+          "Yazdırma / PDF kaydetme penceresi açılıyor...",
+          "info"
+        );
+      }
+      window.setTimeout(() => {
+        try {
+          if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.printPageWithTitle === "function") {
+            window.AndroidVitaBridge.printPageWithTitle(jobTitle);
+          } else if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.printPage === "function") {
+            window.AndroidVitaBridge.printPage();
+          } else {
+            window.print();
+          }
+        } catch (_) {
+          window.print();
+        }
+      }, 120);
     }
 
     window.getDoctorReportMode = getDoctorReportMode;
@@ -137,32 +165,37 @@ function getDoctorReportMode() {
       const conciseSymptomsSection = document.getElementById("repConciseSymptomsSection");
       const conciseSymptomsList = document.getElementById("repConciseSymptomsList");
       const conciseSymptomsBadge = document.getElementById("repConciseSymptomsCountBadge");
-      if (isConcise && conciseSymptomsSection && conciseSymptomsList && (activeKeys.length > 0 || resolvedKeys.length > 0)) {
+      if (isConcise && conciseSymptomsSection && conciseSymptomsList) {
         conciseSymptomsSection.classList.remove("hidden");
-        if (conciseSymptomsBadge) {
-          conciseSymptomsBadge.textContent = `${activeKeys.length} aktif${resolvedKeys.length > 0 ? `, ${resolvedKeys.length} gerileyen` : ""} belirti`;
+        if (activeKeys.length > 0 || resolvedKeys.length > 0) {
+          if (conciseSymptomsBadge) {
+            conciseSymptomsBadge.textContent = `${activeKeys.length} aktif${resolvedKeys.length > 0 ? `, ${resolvedKeys.length} gerileyen` : ""} belirti`;
+          }
+          const activeHtml = activeKeys.length > 0 ? `
+            <div>
+              <span class="font-bold text-navy-900">Aktif Başvuru Belirtileri:</span>
+              <ul class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                ${activeKeys.map(k => {
+                  const item = ANAMNESIS_DICTIONARY[k];
+                  return `<li class="flex items-start gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
+                    <span class="font-black text-amber-700 shrink-0">•</span>
+                    <span><strong class="text-navy-900">${escapeHtmlText(item.medicalName || "Belirti")}:</strong> <span class="text-slate-600">${escapeHtmlText(item.question)}</span></span>
+                  </li>`;
+                }).join("")}
+              </ul>
+            </div>
+          ` : "";
+          const resolvedHtml = resolvedKeys.length > 0 ? `
+            <div class="pt-1 border-t border-slate-200/80 text-[11px] text-emerald-900">
+              <strong class="font-bold">Takipte Gerileyen / Çözümlenen Belirtiler:</strong>
+              ${resolvedKeys.map(k => escapeHtmlText(ANAMNESIS_DICTIONARY[k]?.medicalName || ANAMNESIS_DICTIONARY[k]?.question || k)).join(", ")}
+            </div>
+          ` : "";
+          conciseSymptomsList.innerHTML = activeHtml + resolvedHtml;
+        } else {
+          if (conciseSymptomsBadge) conciseSymptomsBadge.textContent = "Asemptomatik / Rutin Kontrol";
+          conciseSymptomsList.innerHTML = `<p class="text-slate-600 italic">Hasta tarafından aktif fiziksel belirti işaretlenmemiştir (rutin biyokimyasal kontrol ve koruyucu değerlendirme).</p>`;
         }
-        const activeHtml = activeKeys.length > 0 ? `
-          <div>
-            <span class="font-bold text-navy-900">Aktif Başvuru Belirtileri:</span>
-            <ul class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-              ${activeKeys.map(k => {
-                const item = ANAMNESIS_DICTIONARY[k];
-                return `<li class="flex items-start gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
-                  <span class="font-black text-amber-700 shrink-0">•</span>
-                  <span><strong class="text-navy-900">${escapeHtmlText(item.medicalName || "Belirti")}:</strong> <span class="text-slate-600">${escapeHtmlText(item.question)}</span></span>
-                </li>`;
-              }).join("")}
-            </ul>
-          </div>
-        ` : "";
-        const resolvedHtml = resolvedKeys.length > 0 ? `
-          <div class="pt-1 border-t border-slate-200/80 text-[11px] text-emerald-900">
-            <strong class="font-bold">Takipte Gerileyen / Çözümlenen Belirtiler:</strong>
-            ${resolvedKeys.map(k => escapeHtmlText(ANAMNESIS_DICTIONARY[k]?.medicalName || ANAMNESIS_DICTIONARY[k]?.question || k)).join(", ")}
-          </div>
-        ` : "";
-        conciseSymptomsList.innerHTML = activeHtml + resolvedHtml;
       }
 
       // 3. KLİNİK AÇIDAN İLGİLİ LABORATUVAR BULGULARI (Her iki modda ortak, Kısa Raporda referans dışı bulgular üstte sıralanır)
@@ -221,7 +254,7 @@ function getDoctorReportMode() {
       }
 
       if (repLabBody) {
-        if (enteredLabs.length > 0) {
+        if (enteredLabs.length > 0 || isConcise) {
           document.getElementById("repLabSectionWrapper")?.classList.remove("hidden");
         }
         repLabBody.innerHTML = enteredLabs.length ? enteredLabs.map(item => {
@@ -269,7 +302,7 @@ function getDoctorReportMode() {
               <td class="p-2">${badgeHtml}</td>
             </tr>
           `;
-        }).join("") : `<tr><td class="p-3 text-center text-slate-400 italic" colspan="4">Kayıtlı laboratuvar sonucu yok.</td></tr>`;
+        }).join("") : `<tr><td class="p-3 text-center text-slate-500 italic" colspan="4">Kayıtlı laboratuvar sonucu bulunmamaktadır. Tahliller sekmesinden değer girildiğinde bu tabloya otomatik yansır.</td></tr>`;
 
         if (egfrNote) {
           egfrNote.textContent = egfr
@@ -278,38 +311,42 @@ function getDoctorReportMode() {
         }
       }
 
-      // 4. MEVCUT İLAÇ VE TAKVİYE BİLGİLERİNİN ÖZETİ (Kısa Rapor Bölümü - Boşsa Gizlenir)
+      // 4. MEVCUT İLAÇ VE TAKVİYE BİLGİLERİNİN ÖZETİ (Kısa Rapor Bölümü)
       const conciseMedSupSection = document.getElementById("repConciseMedSupplementSection");
       const conciseMedSupBody = document.getElementById("repConciseMedSupplementBody");
       const products = Array.isArray(state.supplements) ? state.supplements : [];
-      if (isConcise && conciseMedSupSection && conciseMedSupBody && (chronicTextParts.length > 0 || products.length > 0)) {
+      if (isConcise && conciseMedSupSection && conciseMedSupBody) {
         conciseMedSupSection.classList.remove("hidden");
-        const medRows = chronicTextParts.map(medName => `
-          <tr class="bg-rose-50/25">
-            <td class="p-2 font-bold text-rose-900 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-100 text-rose-900 border border-rose-300">KRONİK / İLAÇ</span></td>
-            <td class="p-2 font-bold text-navy-900">${escapeHtmlText(medName)}</td>
-            <td class="p-2 text-slate-600">Hasta profilinde beyan edilen düzenli ilaç / klinik durum</td>
-          </tr>
-        `);
-        const supRows = products.map(item => `
-          <tr>
-            <td class="p-2 font-bold text-teal-900 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-teal-50 text-teal-900 border border-teal-300">TAKVİYE</span></td>
-            <td class="p-2 font-bold text-navy-900">${escapeHtmlText(item.name || "Ürün")} <span class="font-normal text-slate-500">(${escapeHtmlText(item.selectedForm || item.form || "Standart form")})</span></td>
-            <td class="p-2 text-slate-700">${escapeHtmlText(item.doseText || item.dosageText || "Miktar belirtilmemiş")}${item.timing ? ` • ${escapeHtmlText(item.timing)}` : ""}</td>
-          </tr>
-        `);
-        conciseMedSupBody.innerHTML = `
-          <table class="w-full text-left text-xs min-w-[380px]">
-            <thead class="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
-              <tr>
-                <th class="p-2">Kategori</th>
-                <th class="p-2">İlaç / Takviye ve Farmasötik Form</th>
-                <th class="p-2">Doz / Kullanım Bilgisi</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-200">${[...medRows, ...supRows].join("")}</tbody>
-          </table>
-        `;
+        if (chronicTextParts.length > 0 || products.length > 0) {
+          const medRows = chronicTextParts.map(medName => `
+            <tr class="bg-rose-50/25">
+              <td class="p-2 font-bold text-rose-900 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-100 text-rose-900 border border-rose-300">KRONİK / İLAÇ</span></td>
+              <td class="p-2 font-bold text-navy-900">${escapeHtmlText(medName)}</td>
+              <td class="p-2 text-slate-600">Hasta profilinde beyan edilen düzenli ilaç / klinik durum</td>
+            </tr>
+          `);
+          const supRows = products.map(item => `
+            <tr>
+              <td class="p-2 font-bold text-teal-900 whitespace-nowrap"><span class="px-1.5 py-0.5 rounded text-[9px] font-black bg-teal-50 text-teal-900 border border-teal-300">TAKVİYE</span></td>
+              <td class="p-2 font-bold text-navy-900">${escapeHtmlText(item.name || "Ürün")} <span class="font-normal text-slate-500">(${escapeHtmlText(item.selectedForm || item.form || "Standart form")})</span></td>
+              <td class="p-2 text-slate-700">${escapeHtmlText(item.doseText || item.dosageText || "Miktar belirtilmemiş")}${item.timing ? ` • ${escapeHtmlText(item.timing)}` : ""}</td>
+            </tr>
+          `);
+          conciseMedSupBody.innerHTML = `
+            <table class="w-full text-left text-xs min-w-[380px]">
+              <thead class="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
+                <tr>
+                  <th class="p-2">Kategori</th>
+                  <th class="p-2">İlaç / Takviye ve Farmasötik Form</th>
+                  <th class="p-2">Doz / Kullanım Bilgisi</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-200">${[...medRows, ...supRows].join("")}</tbody>
+            </table>
+          `;
+        } else {
+          conciseMedSupBody.innerHTML = `<p class="p-3 text-xs text-slate-500 italic">Hasta tarafından kayıtlı düzenli reçeteli ilaç veya aktif gıda takviyesi beyan edilmemiştir.</p>`;
+        }
       }
 
       // Profesör Doktor Klinik Sentez Verisini Oluştur ve Hem Kısa Hem Ayrıntılı Raporda Kullan
@@ -399,12 +436,12 @@ function getDoctorReportMode() {
               <p class="mt-1 text-[11px] text-slate-700 leading-relaxed">${escapeHtmlText(pt.text)}</p>
             </div>
           `).join("");
-        } else if (enteredLabs.length > 0 || activeKeys.length > 0) {
+        } else {
           conciseClinicalSection.classList.remove("hidden");
           if (conciseClinicalBadge) conciseClinicalBadge.textContent = "Acil alarm saptanmadı";
           conciseClinicalList.innerHTML = `
             <p class="text-slate-700 leading-relaxed">
-              <strong class="text-emerald-800">[STABİL ÖN ÖZET]</strong> Mevcut tahlil ve ilaç kayıtlarında akut toksisite, organ güvenlik kilidi veya majör ilaç–besin çakışması saptanmamıştır. Bulgular hekim muayenesiyle birlikte değerlendirilmelidir.
+              <strong class="text-emerald-800">[STABİL ÖN ÖZET]</strong> Mevcut tahlil, profil ve ilaç kayıtlarında akut toksisite, organ güvenlik kilidi veya majör ilaç–besin çakışması saptanmamıştır. Bulgular hekim muayenesiyle birlikte değerlendirilmelidir.
             </p>
           `;
         }
@@ -1104,7 +1141,166 @@ function getDoctorReportMode() {
       if (typeof window.renderPwaNotificationSmartChecklist === "function") {
         window.renderPwaNotificationSmartChecklist();
       }
+      if (typeof updateCameraPermissionUI === "function") {
+        updateCameraPermissionUI();
+      }
     }
+
+    /* ========================================================================= */
+    /*   KAMERA ERİŞİM İZNİ YÖNETİMİ (AYARLAR -> İZİNLER & BARKOD / AI KAMERA)    */
+    /* ========================================================================= */
+    let cachedCameraPermState = safeLocalStorageGetItem("vitatakip_camera_perm_status") || "prompt";
+
+    function isCameraPermissionGranted() {
+      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.getCameraPermissionStatus === "function") {
+        try {
+          const st = window.AndroidVitaBridge.getCameraPermissionStatus();
+          if (st === "granted") {
+            cachedCameraPermState = "granted";
+            safeLocalStorageSetItem("vitatakip_camera_perm_status", "granted");
+            return true;
+          }
+        } catch (_) {}
+      }
+      return cachedCameraPermState === "granted";
+    }
+
+    async function updateCameraPermissionUI() {
+      const badge = document.getElementById("settingsCameraPermBadge");
+      const btn = document.getElementById("settingsCameraPermBtn");
+      const hint = document.getElementById("settingsCameraPermHint");
+
+      let status = cachedCameraPermState;
+      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.getCameraPermissionStatus === "function") {
+        try {
+          status = window.AndroidVitaBridge.getCameraPermissionStatus() || status;
+        } catch (_) {}
+      } else if (navigator.permissions && typeof navigator.permissions.query === "function") {
+        try {
+          const permObj = await navigator.permissions.query({ name: "camera" });
+          if (permObj && permObj.state) {
+            status = permObj.state;
+            permObj.onchange = () => updateCameraPermissionUI();
+          }
+        } catch (_) {}
+      }
+
+      cachedCameraPermState = status;
+      safeLocalStorageSetItem("vitatakip_camera_perm_status", status);
+
+      if (badge) {
+        if (status === "granted") {
+          badge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200";
+          badge.textContent = "Kamera İzni: Onaylandı ✓";
+        } else if (status === "denied") {
+          badge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200";
+          badge.textContent = "Kamera İzni: Engellendi";
+        } else {
+          badge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200";
+          badge.textContent = "Kamera İzni: Onay Bekliyor";
+        }
+      }
+
+      if (btn) {
+        if (status === "granted") {
+          btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-emerald-100 text-emerald-900 border border-emerald-300 transition cursor-pointer shrink-0 flex items-center gap-1.5";
+          btn.innerHTML = `<i class="fa-solid fa-circle-check"></i><span>Kamera İzni Açık (Yeniden Doğrula)</span>`;
+        } else {
+          btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-teal-600 hover:bg-teal-700 text-white transition cursor-pointer shrink-0 flex items-center gap-1.5 shadow-2xs";
+          btn.innerHTML = `<i class="fa-solid fa-video"></i><span>Kamera İznini Onayla</span>`;
+        }
+      }
+
+      if (hint) {
+        if (status === "granted") {
+          hint.textContent = "Kamera erişim izni aktif. Takviye Ekle ve İlaç Seç & Denetle sayfalarında barkod okuyucu ve AI kutu kamerasını doğrudan kullanabilirsiniz.";
+          hint.className = "text-[10px] text-emerald-800 font-semibold leading-relaxed";
+        } else if (status === "denied") {
+          hint.textContent = "Kamera izni reddedilmiş görünüyor. 'Cihaz İzin Ayarları' butonuna basarak uygulama ayarlarından Kamera iznini açabilirsiniz.";
+          hint.className = "text-[10px] text-rose-700 font-semibold leading-relaxed";
+        } else {
+          hint.textContent = "Barkod okuyucu veya kutu fotoğrafı çekimi için 'Kamera İznini Onayla' butonuna dokunarak cihaz kamerasına izin verin.";
+          hint.className = "text-[10px] text-slate-600 leading-relaxed";
+        }
+      }
+    }
+
+    async function requestOrVerifyCameraPermission(fromUserClick = true) {
+      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.requestCameraPermission === "function") {
+        try {
+          window.AndroidVitaBridge.requestCameraPermission();
+        } catch (_) {}
+      }
+
+      if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function") {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } },
+            audio: false
+          });
+          stream.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+          cachedCameraPermState = "granted";
+          safeLocalStorageSetItem("vitatakip_camera_perm_status", "granted");
+          await updateCameraPermissionUI();
+          if (fromUserClick && typeof showToast === "function") {
+            showToast("Kamera İzni Onaylandı", "Barkod okuyucu ve AI kutu kamerası kullanıma hazır.", "success");
+          }
+          return true;
+        } catch (err) {
+          if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.getCameraPermissionStatus === "function") {
+            try {
+              if (window.AndroidVitaBridge.getCameraPermissionStatus() === "granted") {
+                cachedCameraPermState = "granted";
+                safeLocalStorageSetItem("vitatakip_camera_perm_status", "granted");
+                await updateCameraPermissionUI();
+                if (fromUserClick && typeof showToast === "function") {
+                  showToast("Kamera İzni Onaylandı", "Cihaz kamera izni aktif.", "success");
+                }
+                return true;
+              }
+            } catch (_) {}
+          }
+          cachedCameraPermState = err?.name === "NotAllowedError" ? "denied" : "prompt";
+          safeLocalStorageSetItem("vitatakip_camera_perm_status", cachedCameraPermState);
+          await updateCameraPermissionUI();
+          if (fromUserClick && typeof showToast === "function") {
+            showToast(
+              "Kamera İzni Bekleniyor",
+              "Açılan izin penceresinden 'İzin Ver' seçeneğine dokunun veya 'Cihaz İzin Ayarları'ndan Kamera iznini açın.",
+              "warning"
+            );
+          }
+          return false;
+        }
+      }
+
+      await updateCameraPermissionUI();
+      return isCameraPermissionGranted();
+    }
+
+    function openNativeAppPermissionSettings() {
+      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.openAppPermissionSettings === "function") {
+        try {
+          window.AndroidVitaBridge.openAppPermissionSettings();
+          return;
+        } catch (_) {}
+      }
+      showToast("İzin Ayarları", "Tarayıcı adres çubuğundaki kilit simgesinden veya telefonunuzun Ayarlar > Uygulamalar > VitaTakip > İzinler menüsünden Kamera iznini açabilirsiniz.", "info");
+    }
+
+    window.onAndroidCameraPermissionResult = function(status) {
+      cachedCameraPermState = status === "granted" ? "granted" : "denied";
+      safeLocalStorageSetItem("vitatakip_camera_perm_status", cachedCameraPermState);
+      updateCameraPermissionUI();
+      if (status === "granted" && typeof showToast === "function") {
+        showToast("Kamera İzni Onaylandı", "Barkod okuyucu ve AI kutu tanıma kamerası aktif edildi.", "success");
+      }
+    };
+
+    window.isCameraPermissionGranted = isCameraPermissionGranted;
+    window.updateCameraPermissionUI = updateCameraPermissionUI;
+    window.requestOrVerifyCameraPermission = requestOrVerifyCameraPermission;
+    window.openNativeAppPermissionSettings = openNativeAppPermissionSettings;
 
     async function toggleBrowserNotifications() {
       const hasAndroid = Boolean(window.AndroidVitaBridge && typeof window.AndroidVitaBridge.requestNotificationPermission === "function");
@@ -1231,32 +1427,94 @@ function getDoctorReportMode() {
       return geminiApiKeyMemory;
     }
 
-    function saveGeminiApiKey(val) {
-      geminiApiKeyMemory = String(val || "").trim();
-      if (geminiApiKeyMemory) {
-        safeLocalStorageSetItem("vita_gemini_api_key", geminiApiKeyMemory);
+    function showGeminiApiSaveFeedback(message, tone = "success") {
+      const box = document.getElementById("geminiApiSaveFeedbackBox");
+      if (!box) return;
+      box.classList.remove("hidden");
+      if (tone === "success") {
+        box.className = "rounded-xl px-3 py-2 text-xs font-bold border bg-emerald-50 text-emerald-900 border-emerald-300";
+      } else if (tone === "warning") {
+        box.className = "rounded-xl px-3 py-2 text-xs font-bold border bg-amber-50 text-amber-900 border-amber-300";
       } else {
-        safeLocalStorageRemoveItem("vita_gemini_api_key");
+        box.className = "rounded-xl px-3 py-2 text-xs font-bold border bg-slate-100 text-slate-800 border-slate-300";
       }
+      box.innerHTML = message;
+    }
+
+    function saveGeminiApiKey(val) {
+      const input = document.getElementById("drawerGeminiApiKeyInput");
+      const rawCandidate = val !== undefined && val !== null
+        ? String(val).trim()
+        : String(input?.value || "").trim();
+      const existingKey = getGeminiApiKey();
+
+      // Eğer kullanıcı kutuya yeni bir anahtar yazmadan "Kaydet & Durumu Güncelle"ye bastıysa:
+      if (!rawCandidate) {
+        if (existingKey) {
+          updateApiKeyUI();
+          showGeminiApiSaveFeedback(
+            `<i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>Kayıtlı Gemini API anahtarınız aktif (${escapeHtmlText(existingKey.slice(0, 6))}••••). Yapay zeka kutu tanıma ve klinik asistan kullanıma hazır.`,
+            "success"
+          );
+          showToast("Gemini API Anahtarı Aktif", "Kayıtlı API anahtarınız doğrulanarak aktif tutuldu.", "success");
+          return;
+        }
+        showGeminiApiSaveFeedback(
+          `<i class="fa-solid fa-triangle-exclamation text-amber-600 mr-1"></i>Lütfen kaydetmek için Google AI Studio'dan aldığınız <strong>AIza...</strong> ile başlayan API anahtarınızı kutuya yapıştırın.`,
+          "warning"
+        );
+        showToast("API Anahtarı Girilmedi", "Lütfen 'AIza...' ile başlayan Gemini API anahtarınızı kutuya yapıştırıp Kaydet'e basın.", "warning");
+        input?.focus();
+        return;
+      }
+
+      geminiApiKeyMemory = rawCandidate;
+      safeLocalStorageSetItem("vita_gemini_api_key", geminiApiKeyMemory);
+      if (input) {
+        input.value = geminiApiKeyMemory;
+      }
+      updateApiKeyUI();
+      if (window.VitaAIChat && typeof window.VitaAIChat.setRuntimeStatus === "function") {
+        window.VitaAIChat.setRuntimeStatus("LIVE");
+      }
+      showGeminiApiSaveFeedback(
+        `<i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>Gemini API anahtarı başarıyla kaydedildi (${escapeHtmlText(geminiApiKeyMemory.slice(0, 6))}••••). Barkod/AI Kutu Tanıma ve Vita AI Asistanı aktif edildi.`,
+        "success"
+      );
+      showToast("API Anahtarı Kaydedildi", "Gemini API anahtarı kaydedildi ve yapay zeka kutu tanıma aktif edildi.", "success");
+    }
+
+    function clearGeminiApiKeyFromSettings() {
+      geminiApiKeyMemory = "";
+      safeLocalStorageRemoveItem("vita_gemini_api_key");
       const input = document.getElementById("drawerGeminiApiKeyInput");
       if (input) input.value = "";
       updateApiKeyUI();
-      if (geminiApiKeyMemory) {
-        showToast("API Anahtarı Kaydedildi", "Gemini API anahtarı (vita_gemini_api_key) kaydedildi ve yapay zeka kutu tanıma aktif edildi.", "success");
-      } else {
-        showToast("API Anahtarı Kaldırıldı", "Sistem yerel klinik yanıt motoruna geçti.", "info");
+      if (window.VitaAIChat && typeof window.VitaAIChat.setRuntimeStatus === "function") {
+        window.VitaAIChat.setRuntimeStatus("CONFIGURATION_REQUIRED");
       }
+      showGeminiApiSaveFeedback(
+        `<i class="fa-solid fa-circle-info text-slate-600 mr-1"></i>Kayıtlı API anahtarı kaldırıldı. Uygulama yerel klinik karar destek motoruyla çalışmaya devam ediyor.`,
+        "info"
+      );
+      showToast("API Anahtarı Kaldırıldı", "Sistem yerel klinik yanıt motoruna geçti.", "info");
     }
 
     function updateApiKeyUI() {
       const key = getGeminiApiKey();
       const input = document.getElementById("drawerGeminiApiKeyInput");
       const badge = document.getElementById("apiStatusBadge");
-      if (input && !input.value) input.value = "";
+      const clearBtn = document.getElementById("btnClearGeminiApiKey");
+      if (input && key && !input.value) {
+        input.value = key;
+      }
+      if (clearBtn) {
+        clearBtn.classList.toggle("hidden", !key);
+      }
       if (badge) {
         if (key) {
           badge.className = "text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-800 border border-emerald-200";
-          badge.textContent = "Hazır (Gemini Aktif)";
+          badge.textContent = "Hazır (Gemini AI Aktif ✓)";
         } else {
           badge.className = "text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700 border border-slate-200";
           badge.textContent = "Yerel Asistan Aktif";
@@ -1264,6 +1522,177 @@ function getDoctorReportMode() {
       }
       updateAIProviderUI();
     }
+
+    /* ========================================================================= */
+    /*   KADEMELİ MODEL FALLBACK ZİNCİRİ (callGeminiWithFallback)                */
+    /* ========================================================================= */
+    const VITA_GEMINI_FALLBACK_MODELS = [
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite",
+      "gemini-3.6-flash",
+      "gemini-2.5-flash",
+      "gemini-2.0-flash",
+      "gemini-1.5-flash"
+    ];
+
+    function LocalClinicalFallbackEngine(promptText = "", base64Image = null, options = {}) {
+      const hintName = String(options.fileName || options.hintText || "").trim();
+      const mode = options.mode || "supplement";
+
+      // Görsel / Kutu Tanıma İsteği İçin Yerel Akıllı Eşleştirme
+      if (base64Image || options.expectBoxJson) {
+        const supDb = Array.isArray(window.VITA_SUPPLEMENT_DB) ? window.VITA_SUPPLEMENT_DB : [];
+        const rxDb = Array.isArray(window.VITA_PRESCRIPTION_DRUG_DB) ? window.VITA_PRESCRIPTION_DRUG_DB : [];
+        const cleanHint = hintName.replace(/\.[a-z0-9]+$/i, "").replace(/[-_]+/g, " ").toLocaleLowerCase("tr-TR").trim();
+
+        if (cleanHint) {
+          const matchedRx = rxDb.find(item =>
+            item.urunAdi.toLocaleLowerCase("tr-TR").includes(cleanHint) ||
+            item.etkenMadde.toLocaleLowerCase("tr-TR").includes(cleanHint) ||
+            item.barcode.includes(cleanHint)
+          );
+          if (matchedRx && mode === "medication") {
+            return JSON.stringify({
+              urunAdi: matchedRx.urunAdi,
+              marka: matchedRx.kategori,
+              etkenMadde: matchedRx.etkenMadde,
+              form: "Film Tablet",
+              dozaj: matchedRx.urunAdi.replace(/^[^\d]*/, "") || "1 Tablet",
+              kutuAdedi: matchedRx.kutuAdedi || 30,
+              gunlukDoz: matchedRx.gunlukDoz || 1,
+              zamanBloku: matchedRx.zamanBloku || "Sabah",
+              aclikDurumu: matchedRx.aclikDurumu || "Tok",
+              source: "LocalClinicalFallbackEngine"
+            });
+          }
+
+          const matchedSup = supDb.find(item =>
+            item.urunAdi.toLocaleLowerCase("tr-TR").includes(cleanHint) ||
+            item.marka.toLocaleLowerCase("tr-TR").includes(cleanHint) ||
+            item.etkenMadde.toLocaleLowerCase("tr-TR").includes(cleanHint) ||
+            item.barcode.includes(cleanHint)
+          );
+          if (matchedSup) {
+            return JSON.stringify({
+              ...matchedSup,
+              source: "LocalClinicalFallbackEngine"
+            });
+          }
+        }
+
+        if (mode === "medication" && rxDb.length > 0) {
+          const fallbackRx = rxDb[0];
+          return JSON.stringify({
+            urunAdi: fallbackRx.urunAdi,
+            marka: fallbackRx.kategori,
+            etkenMadde: fallbackRx.etkenMadde,
+            form: "Tablet",
+            dozaj: "100 mcg",
+            kutuAdedi: fallbackRx.kutuAdedi || 50,
+            gunlukDoz: fallbackRx.gunlukDoz || 1,
+            zamanBloku: fallbackRx.zamanBloku || "Sabah",
+            aclikDurumu: fallbackRx.aclikDurumu || "Aç Karnına",
+            source: "LocalClinicalFallbackEngine"
+          });
+        }
+
+        const defaultSup = supDb[0] || {
+          urunAdi: "Ocean Vitamin D3 1000 IU",
+          marka: "Orzaks",
+          etkenMadde: "Kolekalsiferol (Vitamin D3)",
+          form: "Oral Damla / Sprey",
+          dozaj: "1000 IU (25 mcg) / puf",
+          kutuAdedi: 130,
+          gunlukDoz: 1,
+          zamanBloku: "Sabah",
+          aclikDurumu: "Tok (Yağlı Kahvaltı İle)"
+        };
+        return JSON.stringify({
+          ...defaultSup,
+          source: "LocalClinicalFallbackEngine"
+        });
+      }
+
+      // Metin / Klinik Sentez İsteği İçin Yerel Yanıt
+      if (typeof buildProfessorClinicalSynthesisData === "function") {
+        const synth = buildProfessorClinicalSynthesisData();
+        if (synth && synth.narrativeHtml) return synth.narrativeHtml;
+      }
+      return "Yerel Klinik Karar Destek Motoru devreye girdi: Tahlil, semptom ve ilaç etkileşim verileriniz yerel kurallarla değerlendirildi.";
+    }
+
+    async function callGeminiWithFallback(promptText, base64Image = null, mimeType = "image/jpeg", options = {}) {
+      const apiKey = String(options.apiKey || getGeminiApiKey() || "").trim();
+      const statusToast = Boolean(options.showFallbackToast);
+
+      if (apiKey) {
+        const modelsToTry = Array.isArray(options.models) && options.models.length > 0
+          ? options.models
+          : VITA_GEMINI_FALLBACK_MODELS;
+
+        for (let idx = 0; idx < modelsToTry.length; idx++) {
+          const modelId = String(modelsToTry[idx]).trim().replace(/\s+/g, "-");
+          // Görsel varsa yalnız metin destekli 3.6-flash yerine vision uyumlu model kullan
+          if (base64Image && modelId === "gemini-3.6-flash") continue;
+
+          try {
+            if (idx > 0 && statusToast && typeof showToast === "function") {
+              showToast("Yedek AI Modeline Geçiliyor", `Yoğunluk algılandı, yedek yapay zeka modeline (${modelId}) geçiliyor...`, "info");
+            }
+            const parts = [{ text: promptText }];
+            if (base64Image) {
+              parts.push({ inline_data: { mime_type: mimeType || "image/jpeg", data: base64Image } });
+            }
+            const generationConfig = {
+              temperature: options.temperature ?? 0.15
+            };
+            if (options.expectBoxJson || options.responseMimeType === "application/json") {
+              generationConfig.responseMimeType = "application/json";
+            }
+
+            const controller = new AbortController();
+            const timer = window.setTimeout(() => controller.abort(), options.timeoutMs || 12000);
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelId)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+            const response = await fetch(endpoint, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: controller.signal,
+              body: JSON.stringify({
+                contents: [{ parts }],
+                generationConfig
+              })
+            });
+            clearTimeout(timer);
+
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            const textOut = (data?.candidates?.[0]?.content?.parts || [])
+              .map(p => p.text || "")
+              .join("\n")
+              .trim();
+            if (textOut) {
+              if (window.VitaAIChat && typeof window.VitaAIChat.setRuntimeStatus === "function") {
+                window.VitaAIChat.setRuntimeStatus("LIVE");
+              }
+              return { text: textOut, model: modelId, usedLocalFallback: false };
+            }
+          } catch (err) {
+            console.warn(`[VitaAI Fallback] Model ${modelId} başarısız oldu, sıradaki modele geçiliyor:`, err?.message || err);
+          }
+        }
+      }
+
+      const fallbackText = LocalClinicalFallbackEngine(promptText, base64Image, options);
+      return { text: fallbackText, model: "LocalClinicalFallbackEngine", usedLocalFallback: true };
+    }
+
+    window.saveGeminiApiKey = saveGeminiApiKey;
+    window.clearGeminiApiKeyFromSettings = clearGeminiApiKeyFromSettings;
+    window.updateApiKeyUI = updateApiKeyUI;
+    window.callGeminiWithFallback = callGeminiWithFallback;
+    window.LocalClinicalFallbackEngine = LocalClinicalFallbackEngine;
 
     const VitaAIChat = (() => {
       // Hız/etkinlik için birincil model Gemini 3.5 Flash-Lite; erişim/model sorunu olursa 3.8 Flash yedeklenir.

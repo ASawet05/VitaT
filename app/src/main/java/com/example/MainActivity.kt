@@ -234,6 +234,14 @@ fun queryAndroidNotificationPermissionState(context: Context): String {
     return if (managerEnabled) "granted" else "denied"
 }
 
+fun queryAndroidCameraPermissionState(context: Context): String {
+    val granted = ContextCompat.checkSelfPermission(
+        context,
+        Manifest.permission.CAMERA
+    ) == PackageManager.PERMISSION_GRANTED
+    return if (granted) "granted" else "default"
+}
+
 @SuppressLint("MissingPermission")
 fun postVitaSystemNotification(context: Context, title: String, body: String): Boolean {
     if (queryAndroidNotificationPermissionState(context) != "granted") {
@@ -262,7 +270,8 @@ private class AndroidVitaBridge(
     private val onOpenCloudSyncDialog: () -> Unit,
     private val onStartDirectGoogleSignIn: () -> Unit,
     private val onSignOutGoogle: () -> Unit,
-    private val onRequestNotificationPermission: () -> Unit
+    private val onRequestNotificationPermission: () -> Unit,
+    private val onRequestCameraPermission: () -> Unit
 ) {
     @JavascriptInterface
     fun printPage() {
@@ -433,6 +442,70 @@ private class AndroidVitaBridge(
             }
         }
     }
+
+    @JavascriptInterface
+    fun getCameraPermissionStatus(): String {
+        return queryAndroidCameraPermissionState(context)
+    }
+
+    @JavascriptInterface
+    fun requestCameraPermission() {
+        val webView = webViewProvider() ?: return
+        webView.post {
+            onRequestCameraPermission()
+        }
+    }
+
+    @JavascriptInterface
+    fun openAppPermissionSettings() {
+        val webView = webViewProvider() ?: return
+        webView.post {
+            runCatching {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", context.packageName, null)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            }
+        }
+    }
+
+    @JavascriptInterface
+    fun sendFeedbackEmail(subject: String?, body: String?): Boolean {
+        val webView = webViewProvider() ?: return false
+        return runCatching {
+            val safeSubject = subject?.takeIf { it.isNotBlank() } ?: "VitaTakip Geri Bildirim ve Öneri"
+            val safeBody = body ?: ""
+            webView.post {
+                runCatching {
+                    val uri = Uri.parse(
+                        "mailto:samet1975bjk@gmail.com?subject=" +
+                            Uri.encode(safeSubject) +
+                            "&body=" +
+                            Uri.encode(safeBody)
+                    )
+                    val intent = Intent(Intent.ACTION_SENDTO, uri).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }.onFailure {
+                    runCatching {
+                        val fallbackIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "message/rfc822"
+                            putExtra(Intent.EXTRA_EMAIL, arrayOf("samet1975bjk@gmail.com"))
+                            putExtra(Intent.EXTRA_SUBJECT, safeSubject)
+                            putExtra(Intent.EXTRA_TEXT, safeBody)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(Intent.createChooser(fallbackIntent, "Geri Bildirimi Gönder").apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        })
+                    }
+                }
+            }
+            true
+        }.getOrDefault(false)
+    }
 }
 
 private fun resolveAssetMimeType(path: String): String {
@@ -468,6 +541,7 @@ fun VitaTakipWebPortalScreen(
 
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var filePathCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+    var pendingWebPermissionRequest by remember { mutableStateOf<PermissionRequest?>(null) }
     var showCloudSyncDialog by rememberSaveable { mutableStateOf(false) }
     var isSigningIn by remember { mutableStateOf(false) }
     var authError by remember { mutableStateOf<String?>(null) }
@@ -490,6 +564,27 @@ fun VitaTakipWebPortalScreen(
         val status = if (isGranted) "granted" else "denied"
         webViewRef?.evaluateJavascript(
             "if (window.onAndroidNotificationPermissionResult) { window.onAndroidNotificationPermissionResult('$status'); }",
+            null
+        )
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        val status = if (isGranted) "granted" else "denied"
+        val pendingReq = pendingWebPermissionRequest
+        pendingWebPermissionRequest = null
+        if (pendingReq != null) {
+            runCatching {
+                if (isGranted) {
+                    pendingReq.grant(pendingReq.resources)
+                } else {
+                    pendingReq.deny()
+                }
+            }
+        }
+        webViewRef?.evaluateJavascript(
+            "if (window.onAndroidCameraPermissionResult) { window.onAndroidCameraPermissionResult('$status'); }",
             null
         )
     }
@@ -691,6 +786,20 @@ fun VitaTakipWebPortalScreen(
                                         null
                                     )
                                 }
+                            },
+                            onRequestCameraPermission = {
+                                val alreadyGranted = ContextCompat.checkSelfPermission(
+                                    ctx,
+                                    Manifest.permission.CAMERA
+                                ) == PackageManager.PERMISSION_GRANTED
+                                if (alreadyGranted) {
+                                    webViewRef?.evaluateJavascript(
+                                        "if (window.onAndroidCameraPermissionResult) { window.onAndroidCameraPermissionResult('granted'); }",
+                                        null
+                                    )
+                                } else {
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
                             }
                         ),
                         "AndroidVitaBridge"
@@ -769,11 +878,18 @@ fun VitaTakipWebPortalScreen(
                         }
 
                         override fun onPermissionRequest(request: PermissionRequest?) {
-                            request?.grant(request.resources)
+                            if (request == null) return
+                            val needsCamera = request.resources.contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE)
+                            if (needsCamera && ContextCompat.checkSelfPermission(ctx, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                                pendingWebPermissionRequest = request
+                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            } else {
+                                request.grant(request.resources)
+                            }
                         }
                     }
 
-                    loadUrl("file:///android_asset/vita_web/index.html?v=24")
+                    loadUrl("file:///android_asset/vita_web/index.html?v=25")
                 }
             },
             update = { webView ->
