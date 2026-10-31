@@ -66,9 +66,78 @@ function applyParsedPdfValues() {
         { code: "metformin", label: "Metformin (Glucophage / Matofin / Diaformin)", faIcon: "fa-pills", keywords: ["metformin", "glucophage", "matofin", "diaformin", "glifor", "glifor"] },
         { code: "antibiotic", label: "Antibiyotik (Cipro / Monodoks / Tetrasiklin)", faIcon: "fa-bacterium", keywords: ["siprofloksasin", "cipro", "ciprofloxacin", "levofloksasin", "tavanic", "moksifloksasin", "avelox", "doksisiklin", "monodoks", "tetrasiklin", "tetracycline", "kinolon", "antibiyotik"] },
         { code: "diuretic", label: "Tansiyon Diüretik (Fludex / Lasix / Hidroklortiyazid)", faIcon: "fa-heart-pulse", keywords: ["diüretik", "idrar söktürücü", "indapamid", "fludex", "hidroklorotiyazid", "furosemid", "lasix", "spironolakton", "aldactone"] },
+        { code: "statin", label: "Kolesterol Statin (Atorvastatin / Rosuvastatin / Lipitor)", faIcon: "fa-chart-line", keywords: ["statin", "atorvastatin", "rosuvastatin", "simvastatin", "pravastatin", "pitavastatin", "lipitor", "crestor", "ator", "colastin", "zocor", "kolesterol"] },
+        { code: "ace_arb", label: "Tansiyon ACE / ARB (Ramipril / Valsartan / Losartan)", faIcon: "fa-stethoscope", keywords: ["ramipril", "enalapril", "lisinopril", "perindopril", "kaptopril", "valsartan", "losartan", "telmisartan", "irbesartan", "kandesartan", "olmesartan", "delix", "diovan", "cozaar", "micardis", "atacand", "coversyl", "ace inhibitörü", "arb"] },
         { code: "bisphosphonate", label: "Kemik Erimesi (Fosamax / Alendronat / Bonviva)", faIcon: "fa-bone", keywords: ["alendronat", "fosamax", "risedronat", "actonel", "ibandronat", "bonviva", "bisfosfonat", "osteoporoz"] },
         { code: "kidney", label: "Kronik Böbrek / Düşük GFR", faIcon: "fa-kit-medical", keywords: ["böbrek", "gfr", "diyaliz", "nefropati"] }
       ],
+
+      /* MİSANTHA TİPİ İLAÇ-VİTAMİN TÜKETİM ANALİZİ (DRUG-INDUCED NUTRIENT DEPLETION) MOTORU */
+      drugNutrientDepletionMap: {
+        metformin: {
+          code: "metformin",
+          drugTitle: "Metformin (Oral Antidiyabetik — Glucophage, Matofin, Diaformin, Glifor)",
+          depletedNutrients: "B12 Vitamini (ve Folat)",
+          primaryMessage: "Bu ilaç vücuttaki B12 Vitamini (Kobalamin) ve Folat depolarını tüketebilir / bağırsak emilimini engelleyebilir, ilgili kan tahlilinizi kontrol edin.",
+          mechanism: "Metformin, terminal ileumda kalsiyum bağımlı İntrensek Faktör–B12 kompleksinin hücre zarından emilimini baskılar. Uzun süreli kullanımda periferik nöropati (el-ayak uyuşması) ve megaloblastik anemi riskine karşı yıllık B12 ve Folat tahlili önerilir.",
+          labKeys: [
+            { key: "b12", label: "Vitamin B12", unit: "pg/mL", optimalHint: "> 300 pg/mL" },
+            { key: "folate", label: "Folat (B9)", unit: "ng/mL", optimalHint: "> 6 ng/mL" }
+          ],
+          recommendedSupplementNote: "Metilkobalamin (Dilaltı B12) veya aktif Metilfolat formu hekim kontrolünde değerlendirilebilir."
+        },
+        ppi: {
+          code: "ppi",
+          drugTitle: "PPI Mide Koruyucular (Omeprazol, Pantoprazol, Lansoprazol, Esomeprazol — Pantpas, Nexium, Lansor)",
+          depletedNutrients: "Magnezyum, B12 Vitamini, Kalsiyum ve Demir",
+          primaryMessage: "Bu ilaç vücuttaki Magnezyum, B12 Vitamini ve Kalsiyum (ayrıca Demir) emilimini azaltarak depoları tüketebilir, ilgili kan tahlilinizi kontrol edin.",
+          mechanism: "Proton pompa inhibitörleri (PPI) gastrik asit salgısını baskılar; besinlerdeki protein bağlı B12'nin ayrışmasını, ferrik demirin (Fe³⁺) emilebilir ferröz forma (Fe²⁺) dönüşmesini ve iyonize Kalsiyum/Magnezyum emilimini düşürür.",
+          labKeys: [
+            { key: "mg", label: "Magnezyum (Mg)", unit: "mg/dL", optimalHint: "1.9 – 2.5 mg/dL" },
+            { key: "b12", label: "Vitamin B12", unit: "pg/mL", optimalHint: "> 300 pg/mL" },
+            { key: "ca", label: "Kalsiyum (Ca)", unit: "mg/dL", optimalHint: "8.8 – 10.2 mg/dL" },
+            { key: "ferritin", label: "Ferritin (Demir Deposu)", unit: "ng/mL", optimalHint: "> 30 ng/mL" }
+          ],
+          recommendedSupplementNote: "Mide asidinden bağımsız emilen Magnezyum Bisglisinat/Sitrat, Kalsiyum Sitrat, Lipozomal Demir ve Dilaltı B12 formları hekimle görüşülebilir."
+        },
+        statin: {
+          code: "statin",
+          drugTitle: "Statin Türevleri / Kolesterol İlaçları (Atorvastatin, Rosuvastatin, Simvastatin — Lipitor, Crestor, Ator)",
+          depletedNutrients: "Koenzim Q10 (CoQ10 / Ubiquinol)",
+          primaryMessage: "Bu ilaç vücuttaki Koenzim Q10 (CoQ10) endojen sentezini baskılayabilir ve hücresel enerji/kas dengesini etkileyebilir, ilgili kan tahlilinizi kontrol edin.",
+          mechanism: "Statinler HMG-CoA redüktaz enzimini inhibe ederken mevalonat yolağını bloke eder; bu yolak kolesterolün yanı sıra mitokondriyal elektron taşıma zincirinin temel kofaktörü olan Koenzim Q10 (Ubiquinone) sentezinden de sorumludur. Kas ağrısı/yorgunluk (miyalji) gelişirse D vitamini ve ALT/CK ile birlikte değerlendirilmelidir.",
+          labKeys: [
+            { key: "d3", label: "25-OH Vitamin D3", unit: "ng/mL", optimalHint: "30 – 60 ng/mL" },
+            { key: "alt", label: "ALT (Karaciğer Enzimi)", unit: "U/L", optimalHint: "< 40 U/L" }
+          ],
+          recommendedSupplementNote: "Koenzim Q10 (Ubiquinol/Ubiquinone) ve D3 vitamini düzeyi kas semptomları açısından hekimle değerlendirilebilir."
+        },
+        diuretic: {
+          code: "diuretic",
+          drugTitle: "Diüretikler / İdrar Söktürücü Tansiyon İlaçları (Furosemid, İndapamid, Hidroklorotiyazid — Lasix, Fludex)",
+          depletedNutrients: "Potasyum, Magnezyum ve Çinko",
+          primaryMessage: "Bu ilaç vücuttaki Potasyum, Magnezyum ve Çinko minerallerinin böbreklerden atılımını artırarak tüketebilir, ilgili kan tahlilinizi kontrol edin.",
+          mechanism: "Loop ve tiyazid grubu diüretikler renal tübüllerden sodyum ve su atılımını artırırken beraberinde Magnezyum (Mg²⁺), Potasyum (K⁺), Çinko (Zn²⁺) ve B1 vitamini (Tiamin) kaybına yol açabilir.",
+          labKeys: [
+            { key: "mg", label: "Magnezyum (Mg)", unit: "mg/dL", optimalHint: "1.9 – 2.5 mg/dL" },
+            { key: "zinc", label: "Çinko (Zn)", unit: "µg/dL", optimalHint: "70 – 120 µg/dL" },
+            { key: "creatinine", label: "Kreatinin (Böbrek)", unit: "mg/dL", optimalHint: "0.6 – 1.2 mg/dL" }
+          ],
+          recommendedSupplementNote: "Elektrolit (Potasyum, Magnezyum), Çinko ve eGFR/Kreatinin tahlilleri düzenli olarak hekim kontrolünde izlenmelidir."
+        },
+        ace_arb: {
+          code: "ace_arb",
+          drugTitle: "ACE İnhibitörleri / ARB Grubu Tansiyon İlaçları (Ramipril, Enalapril, Valsartan, Losartan — Delix, Diovan, Cozaar)",
+          depletedNutrients: "Çinko (Zn)",
+          primaryMessage: "Bu ilaç vücuttaki Çinko (Zn) mineralini tüketebilir (idrarla çinko atılımını artırabilir), ilgili kan tahlilinizi kontrol edin.",
+          mechanism: "ACE inhibitörleri (özellikle sülfhidril/karboksil grubu taşıyanlar) ve bazı ARB'ler çinko iyonları ile kompleks oluşturarak üriner çinko ekskresyonunu (hiperzinküri) artırabilir; tat duyusu azalması, saç dökülmesi ve bağışıklık zayıflaması açısından serum Çinko düzeyi izlenmelidir.",
+          labKeys: [
+            { key: "zinc", label: "Çinko (Zn)", unit: "µg/dL", optimalHint: "70 – 120 µg/dL" },
+            { key: "creatinine", label: "Kreatinin (eGFR)", unit: "mg/dL", optimalHint: "0.6 – 1.2 mg/dL" }
+          ],
+          recommendedSupplementNote: "Serum Çinko tahlili düşükse Çinko Pikolinat/Bisglisinat formu hekiminizle değerlendirilebilir."
+        }
+      },
 
       drugNutrientRules: [
         {
@@ -462,6 +531,42 @@ function applyParsedPdfValues() {
         });
       }
 
+      // 4. VITA_PRESCRIPTION_DRUG_DB Kayıtlı Reçeteli İlaçların Özel Etkileşim Kuralları
+      const activeRxRecords = getActivePrescriptionDrugRecords();
+      if (activeRxRecords.length > 0 && typeof window.evaluatePrescriptionDrugSupplementConflict === "function") {
+        activeRxRecords.forEach(rx => {
+          const conflictEval = window.evaluatePrescriptionDrugSupplementConflict(rx, supplementsList);
+          if (conflictEval && conflictEval.hasConflict) {
+            conflictEval.conflictingSupplements.forEach(sup => {
+              const dupExists = interactions.some(ix =>
+                ix.supplementId === sup.id &&
+                String(ix.title || "").toLocaleLowerCase("tr-TR").includes(String(rx.urunAdi || "").toLocaleLowerCase("tr-TR"))
+              );
+              if (!dupExists) {
+                interactions.push({
+                  id: `RX_DB_${rx.barcode}_${sup.id || sup.name}`,
+                  ruleId: `RX_RULE_${rx.barcode}`,
+                  category: "drug-nutrient",
+                  severity: conflictEval.hasTimingCollision || rx.kategori === "Antikoagülan" || rx.kategori === "Kemik Erimesi" ? "critical" : "warning",
+                  severityLabel: conflictEval.hasTimingCollision
+                    ? `Zamanlama Çakışması (${rx.zamanBloku})`
+                    : `${rx.kategori} • İlaç–Takviye Etkileşim Uyarısı`,
+                  title: `⚠️ ${rx.urunAdi} (${rx.etkenMadde}) × ${sup.name}`,
+                  desc: `${rx.etkilesimKurali}${rx.klinikUyari ? " • " + rx.klinikUyari : ""}`,
+                  actionText: `Önerilen İlaç Kullanımı: ${rx.zamanBloku} — ${rx.aclikDurumu}. ${rx.etkilesimKurali}`,
+                  source: "TİTCK Kısa Ürün Bilgisi (KÜB) / Lexicomp",
+                  separationHours: 4,
+                  supplementId: sup.id || null,
+                  supplementName: sup.name,
+                  recommendedTiming: rx.zamanBloku === "Sabah" ? "Öğle" : "Sabah",
+                  recommendedForm: null
+                });
+              }
+            });
+          }
+        });
+      }
+
       return {
         interactions,
         activeCodes,
@@ -469,6 +574,148 @@ function applyParsedPdfValues() {
         matchedLabelsByCode
       };
     }
+
+    function getActivePrescriptionDrugRecords() {
+      if (!state.user) return [];
+      const db = Array.isArray(window.VITA_PRESCRIPTION_DRUG_DB) ? window.VITA_PRESCRIPTION_DRUG_DB : [];
+      const savedRecords = Array.isArray(state.user.prescriptionDrugRecords) ? state.user.prescriptionDrugRecords : [];
+      const customMeds = Array.isArray(state.user.medications) ? state.user.medications : [];
+      const mergedMap = new Map();
+
+      savedRecords.forEach(rec => {
+        if (rec && (rec.barcode || rec.urunAdi)) {
+          const dbMatch = db.find(d => d.barcode === rec.barcode || d.urunAdi === rec.urunAdi);
+          const normalized = dbMatch ? { ...dbMatch, ...rec } : rec;
+          mergedMap.set(normalized.barcode || normalized.urunAdi, normalized);
+        }
+      });
+
+      customMeds.forEach(medName => {
+        const found = typeof window.findPrescriptionDrugInDb === "function"
+          ? window.findPrescriptionDrugInDb(medName)
+          : db.find(d => d.urunAdi.toLocaleLowerCase("tr-TR") === String(medName || "").toLocaleLowerCase("tr-TR"));
+        if (found && !mergedMap.has(found.barcode)) {
+          mergedMap.set(found.barcode, {
+            ...found,
+            toplamKutuAdedi: found.kutuAdedi,
+            kalanAdet: found.kutuAdedi
+          });
+        }
+      });
+
+      return Array.from(mergedMap.values());
+    }
+
+    function registerPrescriptionDrugToShield(drugRecord, options = {}) {
+      if (!drugRecord || !state.user) return null;
+      if (!Array.isArray(state.user.medications)) state.user.medications = [];
+      if (!Array.isArray(state.user.chronic)) state.user.chronic = [];
+      if (!Array.isArray(state.user.prescriptionDrugRecords)) state.user.prescriptionDrugRecords = [];
+
+      const kutuAdedi = Number(drugRecord.kutuAdedi) > 0 ? Number(drugRecord.kutuAdedi) : 30;
+      const gunlukDoz = Number(drugRecord.gunlukDoz) > 0 ? Number(drugRecord.gunlukDoz) : 1;
+      const entry = {
+        barcode: drugRecord.barcode || "",
+        urunAdi: drugRecord.urunAdi || "",
+        etkenMadde: drugRecord.etkenMadde || "",
+        kategori: drugRecord.kategori || "Reçeteli İlaç",
+        kutuAdedi: kutuAdedi,
+        toplamKutuAdedi: kutuAdedi,
+        kalanAdet: Number(drugRecord.kalanAdet) > 0 ? Number(drugRecord.kalanAdet) : kutuAdedi,
+        gunlukDoz: gunlukDoz,
+        zamanBloku: drugRecord.zamanBloku || "Sabah",
+        aclikDurumu: drugRecord.aclikDurumu || "Tok Karnına",
+        etkilesimKurali: drugRecord.etkilesimKurali || "",
+        tuketilenBesinler: Array.isArray(drugRecord.tuketilenBesinler) ? [...drugRecord.tuketilenBesinler] : [],
+        klinikUyari: drugRecord.klinikUyari || "",
+        addedAt: new Date().toISOString()
+      };
+
+      const existingIdx = state.user.prescriptionDrugRecords.findIndex(
+        r => (entry.barcode && r.barcode === entry.barcode) || r.urunAdi.toLocaleLowerCase("tr-TR") === entry.urunAdi.toLocaleLowerCase("tr-TR")
+      );
+      if (existingIdx >= 0) {
+        state.user.prescriptionDrugRecords[existingIdx] = { ...state.user.prescriptionDrugRecords[existingIdx], ...entry };
+      } else {
+        state.user.prescriptionDrugRecords.push(entry);
+      }
+
+      if (!state.user.medications.some(m => m.toLocaleLowerCase("tr-TR") === entry.urunAdi.toLocaleLowerCase("tr-TR"))) {
+        state.user.medications.push(entry.urunAdi);
+      }
+
+      const chronicCode = typeof window.mapPrescriptionDrugToChronicCode === "function"
+        ? window.mapPrescriptionDrugToChronicCode(entry)
+        : null;
+      if (chronicCode && !state.user.chronic.includes(chronicCode)) {
+        state.user.chronic.push(chronicCode);
+      }
+
+      saveState();
+      renderDailyTab();
+      detectSupplementConflicts();
+
+      const drawer = document.getElementById("dailyProtocolMedicationsDrawer");
+      if (drawer && options.openDrawer !== false) {
+        drawer.open = true;
+      }
+
+      if (window.SoundEffects) SoundEffects.playSuccess();
+      const depletionText = entry.tuketilenBesinler.length
+        ? ` • Tüketilen Besin: ${entry.tuketilenBesinler.join(", ")}`
+        : "";
+      showToast(
+        `🛡️ Reçeteli İlaç Kalkanına Eklendi: ${entry.urunAdi}`,
+        `${entry.kategori} (${entry.etkenMadde}) • ${entry.zamanBloku} (${entry.aclikDurumu})${depletionText}`,
+        "warning"
+      );
+      return entry;
+    }
+
+    function registerPrescriptionDrugByBarcodeOrQuery(queryOrBarcode) {
+      const q = String(queryOrBarcode || "").trim();
+      if (!q) return null;
+      const found = typeof window.findPrescriptionDrugInDb === "function"
+        ? window.findPrescriptionDrugInDb(q)
+        : (window.VITA_PRESCRIPTION_DRUG_DB || []).find(d => d.barcode === q || d.urunAdi === q);
+      if (found) {
+        return registerPrescriptionDrugToShield(found, { openDrawer: true });
+      }
+      return null;
+    }
+
+    function removePrescriptionDrugFromShield(barcodeOrName) {
+      if (!state.user) return;
+      const target = String(barcodeOrName || "").trim().toLocaleLowerCase("tr-TR");
+      if (!target) return;
+
+      let removedRecord = null;
+      if (Array.isArray(state.user.prescriptionDrugRecords)) {
+        state.user.prescriptionDrugRecords = state.user.prescriptionDrugRecords.filter(r => {
+          const match = String(r.barcode || "").toLocaleLowerCase("tr-TR") === target ||
+            String(r.urunAdi || "").toLocaleLowerCase("tr-TR") === target;
+          if (match) removedRecord = r;
+          return !match;
+        });
+      }
+      if (Array.isArray(state.user.medications)) {
+        state.user.medications = state.user.medications.filter(m => {
+          const mLow = String(m || "").toLocaleLowerCase("tr-TR");
+          if (mLow === target) return false;
+          if (removedRecord && mLow === String(removedRecord.urunAdi || "").toLocaleLowerCase("tr-TR")) return false;
+          return true;
+        });
+      }
+      saveState();
+      renderDailyTab();
+      detectSupplementConflicts();
+      showToast("İlaç Kalkandan Çıkarıldı", `${removedRecord ? removedRecord.urunAdi : barcodeOrName} ilaç etkileşim kalkanından kaldırıldı.`, "info");
+    }
+
+    window.registerPrescriptionDrugToShield = registerPrescriptionDrugToShield;
+    window.registerPrescriptionDrugByBarcodeOrQuery = registerPrescriptionDrugByBarcodeOrQuery;
+    window.removePrescriptionDrugFromShield = removePrescriptionDrugFromShield;
+    window.getActivePrescriptionDrugRecords = getActivePrescriptionDrugRecords;
 
     function getSupplementItemInteractions(supplementItem) {
       if (!supplementItem) return [];
@@ -507,6 +754,9 @@ function applyParsedPdfValues() {
       saveState();
       renderDailyTab();
       detectSupplementConflicts();
+      if (idx < 0 && VITA_CLINICAL_DRUG_NUTRIENT_DB.drugNutrientDepletionMap?.[medCode]) {
+        openDrugNutrientDepletionDrawer(medCode);
+      }
       const cls = VITA_CLINICAL_DRUG_NUTRIENT_DB.quickMedicationClasses.find(c => c.code === medCode);
       const label = cls ? cls.label : medCode;
       showToast(
@@ -521,14 +771,24 @@ function applyParsedPdfValues() {
       if (!inputEl || !state.user) return;
       const rawVal = inputEl.value.trim();
       if (!rawVal) {
-        showToast("İlaç Adı Girin", "Lütfen denetlemek istediğiniz reçeteli ilacın adını yazınız.", "warning");
+        showToast("İlaç Adı Girin", "Lütfen denetlemek istediğiniz reçeteli ilacın adını veya barkodunu yazınız.", "warning");
+        return;
+      }
+
+      // Önce VITA_PRESCRIPTION_DRUG_DB'de barkod veya isimle ara
+      const rxMatch = typeof window.findPrescriptionDrugInDb === "function"
+        ? window.findPrescriptionDrugInDb(rawVal)
+        : null;
+      if (rxMatch) {
+        inputEl.value = "";
+        registerPrescriptionDrugToShield(rxMatch, { openDrawer: true });
         return;
       }
 
       if (!Array.isArray(state.user.medications)) state.user.medications = [];
       if (!Array.isArray(state.user.chronic)) state.user.chronic = [];
 
-      const lower = rawVal.toLowerCase();
+      const lower = rawVal.toLocaleLowerCase("tr-TR");
       let matchedClass = null;
       VITA_CLINICAL_DRUG_NUTRIENT_DB.quickMedicationClasses.forEach(cls => {
         if (cls.keywords.some(kw => lower.includes(kw))) {
@@ -539,7 +799,7 @@ function applyParsedPdfValues() {
         }
       });
 
-      if (!state.user.medications.some(m => m.toLowerCase() === lower)) {
+      if (!state.user.medications.some(m => m.toLocaleLowerCase("tr-TR") === lower)) {
         state.user.medications.push(rawVal);
       }
 
@@ -547,6 +807,10 @@ function applyParsedPdfValues() {
       saveState();
       renderDailyTab();
       detectSupplementConflicts();
+
+      if (matchedClass && VITA_CLINICAL_DRUG_NUTRIENT_DB.drugNutrientDepletionMap?.[matchedClass.code]) {
+        openDrugNutrientDepletionDrawer(matchedClass.code, rawVal);
+      }
 
       if (matchedClass) {
         showToast("Klinik Eşleşme Bulundu", `"${rawVal}" (${matchedClass.label}) veritabanında eşleşti ve Günlük Protokol denetlendi.`, "warning");
@@ -556,8 +820,15 @@ function applyParsedPdfValues() {
     }
 
     function removeCustomMedication(medName) {
-      if (!state.user || !Array.isArray(state.user.medications)) return;
-      state.user.medications = state.user.medications.filter(m => m !== medName);
+      if (!state.user) return;
+      if (Array.isArray(state.user.medications)) {
+        state.user.medications = state.user.medications.filter(m => m !== medName);
+      }
+      if (Array.isArray(state.user.prescriptionDrugRecords)) {
+        state.user.prescriptionDrugRecords = state.user.prescriptionDrugRecords.filter(
+          r => String(r.urunAdi || "").toLocaleLowerCase("tr-TR") !== String(medName || "").toLocaleLowerCase("tr-TR")
+        );
+      }
       saveState();
       renderDailyTab();
       detectSupplementConflicts();
@@ -579,44 +850,200 @@ function applyParsedPdfValues() {
       }
     }
 
+    function populateQuickPrescriptionDrugDbSelect() {
+      const selectEl = document.getElementById("quickPrescriptionDrugDbSelect");
+      if (!selectEl) return;
+      const db = Array.isArray(window.VITA_PRESCRIPTION_DRUG_DB) ? window.VITA_PRESCRIPTION_DRUG_DB : [];
+      if (!db.length) return;
+
+      const grouped = {};
+      db.forEach(item => {
+        const cat = item.kategori || "Diğer";
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(item);
+      });
+
+      const optgroupsHtml = Object.keys(grouped).map(cat => {
+        const opts = grouped[cat].map(item =>
+          `<option value="${escapeHtmlText(item.barcode)}">[${escapeHtmlText(item.barcode)}] ${escapeHtmlText(item.urunAdi)} — ${escapeHtmlText(item.etkenMadde)} (${escapeHtmlText(item.zamanBloku)})</option>`
+        ).join("");
+        return `<optgroup label="${escapeHtmlText(cat)}">${opts}</optgroup>`;
+      }).join("");
+
+      selectEl.innerHTML = `<option value="">— Türkiye Reçeteli İlaç Veritabanından (EAN-13) Hızlı İlaç Seçin (${db.length} İlaç) —</option>${optgroupsHtml}`;
+    }
+
     function renderDailyProtocolMedicationsBar() {
       const chipsContainer = document.getElementById("dailyProtocolQuickMedChips");
       const statusBadge = document.getElementById("dailyProtocolDbStatusBadge");
       const headerCountBadge = document.getElementById("headerMedShieldCountBadge");
       const summarySubtext = document.getElementById("medShieldDrawerSummarySubtext");
+      const activeRxContainer = document.getElementById("activePrescriptionShieldCardsContainer");
+      const depletionSummaryCard = document.getElementById("prescriptionDepletionSummaryCard");
       if (!chipsContainer || !state.user) return;
+
+      populateQuickPrescriptionDrugDbSelect();
 
       const chronicList = Array.isArray(state.user.chronic) ? state.user.chronic : [];
       const customMeds = Array.isArray(state.user.medications) ? state.user.medications : [];
+      const activeRxRecords = getActivePrescriptionDrugRecords();
 
       const quickHtml = VITA_CLINICAL_DRUG_NUTRIENT_DB.quickMedicationClasses.map(cls => {
         const isActive = chronicList.includes(cls.code);
+        const depletionRule = VITA_CLINICAL_DRUG_NUTRIENT_DB.drugNutrientDepletionMap?.[cls.code];
         return `
-          <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); toggleQuickMedication(${safeJsStringAttribute(cls.code)})" class="px-2.5 py-1 rounded-xl text-[10px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
-            isActive
-              ? "bg-rose-600 text-white shadow-sm ring-1 ring-rose-700"
-              : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200"
-          }">
-            <i class="fa-solid ${cls.faIcon} ${isActive ? 'text-rose-100' : 'text-slate-400'}"></i>
-            <span>${escapeHtmlText(cls.label)}</span>
-            ${isActive ? '<i class="fa-solid fa-check text-[9px] ml-0.5"></i>' : ''}
-          </button>
+          <div class="inline-flex items-center gap-1 rounded-xl p-0.5 ${isActive ? 'bg-rose-50 border border-rose-200' : ''}">
+            <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); toggleQuickMedication(${safeJsStringAttribute(cls.code)})" class="px-2.5 py-1 rounded-xl text-[10px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+              isActive
+                ? "bg-rose-600 text-white shadow-sm ring-1 ring-rose-700"
+                : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200"
+            }">
+              <i class="fa-solid ${cls.faIcon} ${isActive ? 'text-rose-100' : 'text-slate-400'}"></i>
+              <span>${escapeHtmlText(cls.label)}</span>
+              ${isActive ? '<i class="fa-solid fa-check text-[9px] ml-0.5"></i>' : ''}
+            </button>
+            ${depletionRule ? `
+              <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); openDrugNutrientDepletionDrawer(${safeJsStringAttribute(cls.code)})" class="misantha-depletion-tag" title="İlaç-Vitamin Tüketim Analizini Göster (${escapeHtmlText(depletionRule.depletedNutrients)})">
+                <i class="fa-solid fa-flask-vial text-amber-700"></i>
+                <span>İlaç-Vitamin Etkileşimi</span>
+              </button>
+            ` : ''}
+          </div>
         `;
       }).join("");
 
-      const customHtml = customMeds.map(med => `
-        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-bold bg-navy-900 text-teal-200 border border-navy-800">
-          <i class="fa-solid fa-prescription-bottle text-teal-400"></i>
-          <span>${escapeHtmlText(med)}</span>
-          <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); removeCustomMedication(${safeJsStringAttribute(med)})" class="hover:text-rose-300 ml-0.5 cursor-pointer" title="Kaldır">
-            <i class="fa-solid fa-xmark"></i>
-          </button>
-        </span>
-      `).join("");
+      const customHtml = customMeds.map(med => {
+        const matchedDepletionCode = resolveDepletionCodeForMedicationName(med);
+        return `
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-bold bg-navy-900 text-teal-200 border border-navy-800">
+            <i class="fa-solid fa-prescription-bottle text-teal-400"></i>
+            <span>${escapeHtmlText(med)}</span>
+            ${matchedDepletionCode ? `
+              <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); openDrugNutrientDepletionDrawer(${safeJsStringAttribute(matchedDepletionCode)}, ${safeJsStringAttribute(med)})" class="misantha-depletion-tag ml-0.5" title="Bu ilacın vitamin/mineral tüketim analizini aç">
+                <i class="fa-solid fa-flask-vial text-amber-700"></i>
+                <span>İlaç-Vitamin Etkileşimi</span>
+              </button>
+            ` : ''}
+            <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); removeCustomMedication(${safeJsStringAttribute(med)})" class="hover:text-rose-300 ml-0.5 cursor-pointer" title="Kaldır">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </span>
+        `;
+      }).join("");
 
       chipsContainer.innerHTML = quickHtml + customHtml;
 
-      const activeCount = chronicList.length + customMeds.length;
+      // Aktif Reçeteli İlaç Kalkanı Kartları (Yeşil Kalkan Rozeti + Çakışma Varsa Kırmızı/Turuncu ! Rozeti ve Etkileşim Kuralı)
+      if (activeRxContainer) {
+        if (activeRxRecords.length === 0) {
+          activeRxContainer.classList.add("hidden");
+          activeRxContainer.innerHTML = "";
+        } else {
+          activeRxContainer.classList.remove("hidden");
+          const supplementsList = Array.isArray(state.supplements) ? state.supplements : [];
+          activeRxContainer.innerHTML = activeRxRecords.map(rx => {
+            const conflictInfo = typeof window.evaluatePrescriptionDrugSupplementConflict === "function"
+              ? window.evaluatePrescriptionDrugSupplementConflict(rx, supplementsList)
+              : { hasConflict: false, hasTimingCollision: false, conflictingSupplements: [] };
+            const hasConflict = Boolean(conflictInfo && conflictInfo.hasConflict);
+            const conflictSupNames = (conflictInfo.conflictingSupplements || []).map(s => s.name).join(", ");
+            const kalanGun = Math.max(0, Math.floor((Number(rx.kalanAdet || rx.kutuAdedi || 30)) / Math.max(1, Number(rx.gunlukDoz || 1))));
+
+            return `
+              <div class="rounded-xl border ${hasConflict ? 'border-rose-300 bg-rose-50/90' : 'border-emerald-200 bg-emerald-50/70'} p-2.5 transition">
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                  <div class="flex items-start gap-2 min-w-0">
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white shadow-xs shrink-0" title="Gerçek Zamanlı İlaç–Besin Etkileşim Kalkanı Aktif">
+                      <i class="fa-solid fa-shield-halved"></i>
+                      <span>Kalkan Aktif</span>
+                    </span>
+                    ${hasConflict ? `
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-xs animate-pulse shrink-0" title="Takviye Çakışması Tespit Edildi">
+                        <i class="fa-solid fa-circle-exclamation"></i>
+                        <span>! Çakışma Uyarısı (${escapeHtmlText(conflictSupNames)})</span>
+                      </span>
+                    ` : ''}
+                    <div class="min-w-0">
+                      <div class="text-xs font-black text-navy-900 flex flex-wrap items-center gap-1.5">
+                        <span>${escapeHtmlText(rx.urunAdi)}</span>
+                        <span class="text-[10px] font-bold text-slate-600">(${escapeHtmlText(rx.etkenMadde)})</span>
+                        <span class="px-1.5 py-0.2 rounded bg-white/90 border border-slate-200 text-[9px] font-extrabold text-indigo-800">${escapeHtmlText(rx.kategori)}</span>
+                      </div>
+                      <div class="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-slate-700 font-semibold">
+                        <span><i class="fa-regular fa-clock text-teal-700 mr-0.5"></i>${escapeHtmlText(rx.zamanBloku)} • ${escapeHtmlText(rx.aclikDurumu)}</span>
+                        <span>• Kutu: <strong>${escapeHtmlText(rx.kutuAdedi)}</strong> tb (${escapeHtmlText(kalanGun)} gün)</span>
+                        ${rx.barcode ? `<span class="font-mono text-[9px] text-slate-500">EAN: ${escapeHtmlText(rx.barcode)}</span>` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); removePrescriptionDrugFromShield(${safeJsStringAttribute(rx.barcode || rx.urunAdi)})" class="text-slate-400 hover:text-rose-600 text-xs px-1.5 py-0.5 rounded cursor-pointer" title="Kalkandan Kaldır">
+                    <i class="fa-solid fa-trash-can"></i>
+                  </button>
+                </div>
+                <div class="mt-1.5 rounded-lg ${hasConflict ? 'bg-amber-100/90 border border-rose-300 text-rose-950' : 'bg-white/90 border border-emerald-200 text-slate-700'} px-2.5 py-1.5 text-[10px] leading-relaxed">
+                  <strong class="${hasConflict ? 'text-rose-800' : 'text-emerald-800'}">
+                    <i class="fa-solid ${hasConflict ? 'fa-triangle-exclamation text-rose-600' : 'fa-shield-virus text-emerald-600'} mr-1"></i>Klinik Etkileşim Kuralı:
+                  </strong>
+                  ${escapeHtmlText(rx.etkilesimKurali)}
+                  ${rx.klinikUyari ? `<div class="mt-1 font-bold text-rose-800"><i class="fa-solid fa-bell mr-1"></i>Klinik Uyarı: ${escapeHtmlText(rx.klinikUyari)}</div>` : ''}
+                </div>
+              </div>
+            `;
+          }).join("");
+        }
+      }
+
+      // İlaç-Vitamin Tüketim Analizi Kartı (tuketilenBesinler + "Tahlil Takibi Önerilir" Uyarısı)
+      if (depletionSummaryCard) {
+        const depletingDrugs = activeRxRecords.filter(
+          rx => (Array.isArray(rx.tuketilenBesinler) && rx.tuketilenBesinler.length > 0) || Boolean(rx.klinikUyari)
+        );
+        if (depletingDrugs.length === 0) {
+          depletionSummaryCard.classList.add("hidden");
+          depletionSummaryCard.innerHTML = "";
+        } else {
+          depletionSummaryCard.classList.remove("hidden");
+          const rowsHtml = depletingDrugs.map(rx => {
+            const badgesHtml = (rx.tuketilenBesinler || []).map(nutrient => `
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200/80 text-amber-950 border border-amber-400">
+                <i class="fa-solid fa-arrow-trend-down text-rose-700"></i>
+                <span>${escapeHtmlText(nutrient)}</span>
+              </span>
+            `).join("");
+            return `
+              <div class="rounded-lg bg-white/90 border border-amber-200 p-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <div>
+                  <div class="text-[11px] font-black text-navy-900">
+                    <i class="fa-solid fa-pills text-amber-700 mr-1"></i>${escapeHtmlText(rx.urunAdi)}
+                    <span class="text-[10px] font-semibold text-slate-600">(${escapeHtmlText(rx.etkenMadde)})</span>
+                  </div>
+                  ${rx.klinikUyari ? `<div class="text-[10px] font-bold text-rose-800 mt-0.5"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${escapeHtmlText(rx.klinikUyari)}</div>` : ''}
+                </div>
+                <div class="flex flex-wrap items-center gap-1">
+                  ${badgesHtml}
+                </div>
+              </div>
+            `;
+          }).join("");
+
+          depletionSummaryCard.innerHTML = `
+            <div class="flex flex-wrap items-center justify-between gap-1.5 mb-2">
+              <div class="flex items-center gap-1.5">
+                <i class="fa-solid fa-flask-vial text-amber-700 text-xs"></i>
+                <span class="text-[11px] font-black text-amber-950 uppercase tracking-wider">İlaç-Vitamin Tüketim Analizi (Besin Tükenmesi)</span>
+              </div>
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-600 text-white shadow-xs">
+                <i class="fa-solid fa-vial-circle-check"></i>
+                <span>Tahlil Takibi Önerilir</span>
+              </span>
+            </div>
+            <div class="space-y-1.5">${rowsHtml}</div>
+          `;
+        }
+      }
+
+      const uniqueCount = new Set([...chronicList, ...customMeds, ...activeRxRecords.map(r => r.urunAdi)]).size;
+      const activeCount = Math.max(uniqueCount, chronicList.length + customMeds.length);
       if (headerCountBadge) {
         headerCountBadge.textContent = String(activeCount);
         headerCountBadge.className = activeCount > 0
@@ -625,7 +1052,7 @@ function applyParsedPdfValues() {
       }
       if (summarySubtext) {
         summarySubtext.textContent = activeCount > 0
-          ? `${activeCount} kayıtlı ilaç/kronik durum aktif olarak takviyelerinizle karşılaştırılıyor. Düzenlemek için dokunun.`
+          ? `${activeCount} kayıtlı ilaç/kronik durum aktif olarak takviyelerinizle karşılaştırılıyor. İlaç-Vitamin Etkileşimi etiketine tıklayarak tüketim analizini inceleyin.`
           : "Kullandığınız reçeteli ilaçları seçmek veya denetlemek için dokunun (Kayıt/Profil bilgilerinizle senkronizedir).";
       }
 
@@ -638,6 +1065,105 @@ function applyParsedPdfValues() {
           : "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200";
       }
     }
+
+    function resolveDepletionCodeForMedicationName(medName = "") {
+      const lower = String(medName || "").toLocaleLowerCase("tr-TR");
+      if (!lower) return null;
+      const map = VITA_CLINICAL_DRUG_NUTRIENT_DB.drugNutrientDepletionMap || {};
+      if (map[lower]) return lower;
+      for (const cls of VITA_CLINICAL_DRUG_NUTRIENT_DB.quickMedicationClasses) {
+        if (map[cls.code] && cls.keywords.some(kw => lower.includes(kw))) {
+          return cls.code;
+        }
+      }
+      const rxMatch = typeof window.findPrescriptionDrugInDb === "function"
+        ? window.findPrescriptionDrugInDb(medName)
+        : null;
+      if (rxMatch && typeof window.mapPrescriptionDrugToChronicCode === "function") {
+        const mapped = window.mapPrescriptionDrugToChronicCode(rxMatch);
+        if (mapped && map[mapped]) return mapped;
+      }
+      return null;
+    }
+
+    function openDrugNutrientDepletionDrawer(codeOrMedName, customMedLabel = "") {
+      const drawer = document.getElementById("drugDepletionMiniModal");
+      if (!drawer) return;
+      const resolvedCode = resolveDepletionCodeForMedicationName(codeOrMedName) || codeOrMedName;
+      const rule = VITA_CLINICAL_DRUG_NUTRIENT_DB.drugNutrientDepletionMap?.[resolvedCode];
+      if (!rule) return;
+
+      const medShieldDetails = document.getElementById("dailyProtocolMedicationsDrawer");
+      if (medShieldDetails && !medShieldDetails.open) {
+        medShieldDetails.open = true;
+      }
+
+      const labs = state.labValues || {};
+      const labRowsHtml = (rule.labKeys || []).map(lk => {
+        const val = labs[lk.key];
+        const hasVal = val !== null && val !== undefined && val !== "";
+        return `
+          <div class="p-2 rounded-xl bg-white border border-amber-200 flex items-center justify-between gap-2 text-[11px]">
+            <div>
+              <strong class="text-navy-900 font-bold">${escapeHtmlText(lk.label)}</strong>
+              <span class="block text-[9.5px] text-slate-500">Hedef/Referans: ${escapeHtmlText(lk.optimalHint)}</span>
+            </div>
+            <span class="px-2 py-0.5 rounded-lg font-mono font-black text-[10.5px] ${hasVal ? 'bg-teal-50 text-teal-900 border border-teal-200' : 'bg-rose-50 text-rose-800 border border-rose-200'}">
+              ${hasVal ? `${escapeHtmlText(val)} ${escapeHtmlText(lk.unit)}` : 'Tahlil Girilmedi — Kontrol Edin'}
+            </span>
+          </div>
+        `;
+      }).join("");
+
+      drawer.classList.remove("hidden");
+      drawer.innerHTML = `
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center text-sm shrink-0 shadow-xs">
+              <i class="fa-solid fa-flask-vial"></i>
+            </span>
+            <div>
+              <span class="text-[9.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-950">Misantha İlaç–Vitamin Tüketim Analizi</span>
+              <h4 class="text-xs sm:text-sm font-black text-navy-900 mt-0.5">${escapeHtmlText(customMedLabel ? `${customMedLabel} (${rule.drugTitle})` : rule.drugTitle)}</h4>
+            </div>
+          </div>
+          <button type="button" onclick="closeDrugNutrientDepletionDrawer()" class="w-7 h-7 rounded-lg bg-white/80 hover:bg-white text-slate-500 hover:text-slate-800 border border-amber-200 flex items-center justify-center cursor-pointer" title="Kapat">
+            <i class="fa-solid fa-xmark text-xs"></i>
+          </button>
+        </div>
+        <div class="p-2.5 rounded-xl bg-amber-100/80 border border-amber-300 text-xs font-black text-amber-950 flex items-start gap-2">
+          <i class="fa-solid fa-triangle-exclamation text-rose-600 mt-0.5"></i>
+          <span>${escapeHtmlText(rule.primaryMessage)}</span>
+        </div>
+        <p class="text-[11px] text-slate-700 leading-relaxed">
+          <strong class="text-navy-900">Klinik Mekanizma:</strong> ${escapeHtmlText(rule.mechanism)}
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+          ${labRowsHtml}
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-amber-200/80">
+          <span class="text-[10px] font-bold text-teal-900"><i class="fa-solid fa-capsules text-teal-600 mr-1"></i>${escapeHtmlText(rule.recommendedSupplementNote)}</span>
+          <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); navigateToView('view-labs')" class="px-3 py-1.5 rounded-xl bg-navy-900 hover:bg-slate-800 text-white text-[10px] font-black transition cursor-pointer inline-flex items-center gap-1.5">
+            <i class="fa-solid fa-vial text-teal-300"></i>
+            <span>Kan Tahlilinizi Kontrol Edin</span>
+          </button>
+        </div>
+      `;
+      try {
+        drawer.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      } catch (_) {}
+    }
+
+    function closeDrugNutrientDepletionDrawer() {
+      const drawer = document.getElementById("drugDepletionMiniModal");
+      if (drawer) {
+        drawer.classList.add("hidden");
+      }
+    }
+
+    window.openDrugNutrientDepletionDrawer = openDrugNutrientDepletionDrawer;
+    window.closeDrugNutrientDepletionDrawer = closeDrugNutrientDepletionDrawer;
+    window.resolveDepletionCodeForMedicationName = resolveDepletionCodeForMedicationName;
 
     function updateModalLiveInteractionPreview() {
       const previewEl = document.getElementById("modalLiveInteractionWarning");

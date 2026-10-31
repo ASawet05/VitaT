@@ -26,7 +26,7 @@ function renderDailyTab() {
       const todaySupplements = state.supplements.filter(s => isSupplementScheduledToday(s));
       const morningItems = todaySupplements.filter(s => s.timing === "Sabah");
       const noonItems = todaySupplements.filter(s => s.timing === "Öğle");
-      const eveningItems = todaySupplements.filter(s => s.timing === "Akşam");
+      const eveningItems = todaySupplements.filter(s => s.timing === "Akşam" || s.timing === "Gece");
 
       document.getElementById("dashMorningCount").textContent = `${morningItems.filter(i => i.taken).length}/${morningItems.length}`;
       document.getElementById("dashNoonCount").textContent = `${noonItems.filter(i => i.taken).length}/${noonItems.length}`;
@@ -183,10 +183,34 @@ function renderDailyTab() {
               </div>
             ` : "";
 
+            // Misantha Tipi Kutu, Stok ve Kalan Gün Sayacı (Pill & Days Counter)
+            normalizeSupplementStockFields(item);
+            const kalanAdet = item.kalanAdet;
+            const toplamKutuAdedi = item.toplamKutuAdedi;
+            const gunlukDoz = item.gunlukDoz;
+            const kalanGun = Math.floor(kalanAdet / gunlukDoz);
+            const isCriticalStock = kalanGun <= 3;
+            const stockBadgeHtml = isCriticalStock
+              ? `<span class="misantha-stock-critical-badge" data-testid="critical-stock-badge"><i class="fa-solid fa-triangle-exclamation"></i><span>Kritik Stok: ${kalanGun} gün yetecek (${kalanAdet} tablet kaldı)</span></span>`
+              : `<span class="misantha-stock-normal-badge" data-testid="normal-stock-badge"><i class="fa-solid fa-boxes-stacked"></i><span>Stok: ${kalanAdet}/${toplamKutuAdedi} tablet · ${kalanGun} gün yetecek (Günlük doz: ${gunlukDoz})</span></span>`;
+
+            const misanthaStockBarHtml = `
+              <div class="misantha-stock-bar">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  ${stockBadgeHtml}
+                  ${item.doseText ? `<span class="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">${escapeHtmlText(item.doseText)}</span>` : ""}
+                </div>
+                <button type="button" onclick="if(window.SoundEffects) SoundEffects.playClick(); refillSupplementBox(${safeJsStringAttribute(item.id)})" class="misantha-refill-btn" title="Biten kutuyu yenile (+${toplamKutuAdedi} adet ekle)">
+                  <i class="fa-solid fa-box-open"></i>
+                  <span>Yeni Kutu Ekle (+Stok)</span>
+                </button>
+              </div>
+            `;
+
             card.innerHTML = `
               <div class="flex items-start justify-between gap-2 sm:gap-3">
                 <div class="flex items-start gap-2.5 sm:gap-3 min-w-0 flex-1">
-                  <input type="checkbox" ${item.taken ? "checked" : ""} onchange="if(window.SoundEffects) SoundEffects.playClick(); toggleSupplementStatus(${safeJsStringAttribute(item.id)})" class="mt-1 h-4 w-4 rounded text-teal-600 focus:ring-teal-500 cursor-pointer flex-shrink-0">
+                  <input type="checkbox" ${item.taken ? "checked" : ""} onchange="if(window.SoundEffects) SoundEffects.playClick(); toggleSupplementStatus(${safeJsStringAttribute(item.id)})" class="mt-1 h-4 w-4 rounded text-teal-600 focus:ring-teal-500 cursor-pointer flex-shrink-0" title="İçtim / Alındı olarak işaretle">
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center justify-between gap-2">
                       <h5 class="min-w-0 flex-1 break-words text-xs font-black sm:text-sm ${item.taken ? 'line-through text-slate-400' : 'text-navy-900'}">${escapeHtmlText(item.name)}</h5>
@@ -196,6 +220,7 @@ function renderDailyTab() {
                       <span class="text-[10px] text-sky-800 font-bold bg-sky-50 px-2 py-0.5 rounded border border-sky-200"><i class="fa-regular fa-clock mr-1"></i>${escapeHtmlText(getSupplementTimeLabel(item))}</span>
                       <span class="text-[10px] text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200"><i class="fa-regular fa-calendar mr-1"></i>${escapeHtmlText(getSupplementScheduleDaysLabel(item))}</span>
                     </div>
+                    ${misanthaStockBarHtml}
                     ${item.instruction ? `
                       <div class="mt-2">
                         <button type="button" aria-expanded="false" onclick="if(window.SoundEffects) SoundEffects.playClick(); const info=this.nextElementSibling; const opening=info.classList.contains('hidden'); info.classList.toggle('hidden'); this.setAttribute('aria-expanded', String(opening));" class="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-100 focus:outline-none focus:ring-2 focus:ring-amber-300">
@@ -230,6 +255,91 @@ function renderDailyTab() {
       }
     }
 
+    /* =========================================================================
+       MİSANTHA TİPİ KUTU, STOK VE KALAN GÜN SAYACI (PILL & DAYS COUNTER)
+       ========================================================================= */
+    function normalizeSupplementStockFields(item) {
+      if (!item || typeof item !== "object") return item;
+      const boxCount = Number(item.toplamKutuAdedi);
+      item.toplamKutuAdedi = Number.isFinite(boxCount) && boxCount >= 1 ? Math.round(boxCount) : 30;
+      const dailyDose = Number(item.gunlukDoz);
+      item.gunlukDoz = Number.isFinite(dailyDose) && dailyDose >= 1 ? Math.round(dailyDose) : 1;
+      const rem = Number(item.kalanAdet);
+      item.kalanAdet = Number.isFinite(rem) && rem >= 0 ? Math.round(rem) : item.toplamKutuAdedi;
+      return item;
+    }
+
+    function calculateSupplementRemainingDays(item) {
+      normalizeSupplementStockFields(item);
+      return Math.floor(item.kalanAdet / item.gunlukDoz);
+    }
+
+    function refillSupplementBox(id, customAddAmount) {
+      const item = (state.supplements || []).find(s => s.id === id);
+      if (!item) return;
+      normalizeSupplementStockFields(item);
+      const addCount = Number.isFinite(Number(customAddAmount)) && Number(customAddAmount) > 0
+        ? Math.round(Number(customAddAmount))
+        : item.toplamKutuAdedi;
+      item.kalanAdet = Math.max(0, item.kalanAdet + addCount);
+      if (item.kalanAdet > item.toplamKutuAdedi) {
+        item.toplamKutuAdedi = item.kalanAdet;
+      }
+      saveState();
+      renderDailyTab();
+      const kalanGun = Math.floor(item.kalanAdet / item.gunlukDoz);
+      showToast(
+        "Yeni Kutu Eklendi (+Stok)",
+        `${item.name} stoğuna +${addCount} adet eklendi. Güncel stok: ${item.kalanAdet} tablet (${kalanGun} gün yetecek).`,
+        "success"
+      );
+    }
+
+    function updateManualModalStockPreview(syncRemaining = false) {
+      const boxInput = document.getElementById("manualSupBoxCount");
+      const remInput = document.getElementById("manualSupRemainingCount");
+      const doseInput = document.getElementById("manualSupDailyDose");
+      const badge = document.getElementById("modalMisanthaDaysPreviewBadge");
+      if (!boxInput || !remInput || !doseInput) return;
+      const boxVal = Math.max(1, parseInt(boxInput.value, 10) || 30);
+      if (syncRemaining) {
+        remInput.value = String(boxVal);
+      }
+      const remVal = Math.max(0, parseInt(remInput.value, 10) || 0);
+      const doseVal = Math.max(1, parseInt(doseInput.value, 10) || 1);
+      const kalanGun = Math.floor(remVal / doseVal);
+      if (badge) {
+        badge.textContent = kalanGun <= 3
+          ? `Kritik Stok: ${kalanGun} gün yetecek (${remVal} tablet kaldı)`
+          : `${kalanGun} gün yetecek (${remVal} tablet)`;
+        badge.className = kalanGun <= 3
+          ? "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300"
+          : "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-white text-indigo-800 border border-indigo-200";
+      }
+    }
+
+    function updateBarcodeModalStockPreview() {
+      const boxInput = document.getElementById("barcodeSupplementBoxCount");
+      const doseInput = document.getElementById("barcodeSupplementDailyDose");
+      const preview = document.getElementById("barcodeSupplementDaysPreview");
+      if (!boxInput || !doseInput || !preview) return;
+      const boxVal = Math.max(1, parseInt(boxInput.value, 10) || 30);
+      const doseVal = Math.max(1, parseInt(doseInput.value, 10) || 1);
+      const kalanGun = Math.floor(boxVal / doseVal);
+      preview.textContent = kalanGun <= 3
+        ? `Kritik Stok: ${kalanGun} gün yetecek (${boxVal} tablet kaldı)`
+        : `${kalanGun} gün yetecek (${boxVal} adet)`;
+      preview.className = kalanGun <= 3
+        ? "text-xs font-black text-rose-700 mt-0.5"
+        : "text-xs font-black text-teal-800 mt-0.5";
+    }
+
+    window.normalizeSupplementStockFields = normalizeSupplementStockFields;
+    window.calculateSupplementRemainingDays = calculateSupplementRemainingDays;
+    window.refillSupplementBox = refillSupplementBox;
+    window.updateManualModalStockPreview = updateManualModalStockPreview;
+    window.updateBarcodeModalStockPreview = updateBarcodeModalStockPreview;
+
     function changeDailySupplementForm(itemId, newForm) {
       const item = state.supplements.find(s => s.id === itemId);
       if (!item || !item.formKey || !FORM_DOSAGE_CONFIG[item.formKey]) return;
@@ -254,24 +364,48 @@ function renderDailyTab() {
     }
 
     function markTimingTaken(timing) {
-      const validTimings = ["Sabah", "Öğle", "Akşam"];
+      const validTimings = ["Sabah", "Öğle", "Akşam", "Gece"];
       if (!validTimings.includes(timing)) return;
-      const items = (state.supplements || []).filter(item => item.timing === timing && isSupplementScheduledToday(item));
+      const items = (state.supplements || []).filter(item => {
+        if (!isSupplementScheduledToday(item)) return false;
+        if (timing === "Akşam") return item.timing === "Akşam" || item.timing === "Gece";
+        return item.timing === timing;
+      });
       if (!items.length) { showToast("Takviye Bulunamadı", "Bu zaman diliminde işaretlenecek takviye yok.", "info"); return; }
-      items.forEach(item => { item.taken = true; });
+      items.forEach(item => {
+        normalizeSupplementStockFields(item);
+        if (!item.taken) {
+          item.kalanAdet = Math.max(0, item.kalanAdet - item.gunlukDoz);
+        }
+        item.taken = true;
+      });
       const saved = saveState();
       renderDailyTab();
       if (window.SoundEffects) SoundEffects.playSuccess();
-      showToast("Zaman Dilimi Güncellendi", `${timing} grubundaki ${items.length} takviye alındı olarak işaretlendi.${saved === false ? " Ancak tarayıcı kayıt işlemi başarısız olmuş olabilir." : ""}`, saved === false ? "warning" : "success");
+      showToast("Zaman Dilimi Güncellendi", `${timing} grubundaki ${items.length} takviye alındı olarak işaretlendi ve stoktan düşüldü.${saved === false ? " Ancak tarayıcı kayıt işlemi başarısız olmuş olabilir." : ""}`, saved === false ? "warning" : "success");
     }
 
     function toggleSupplementStatus(id) {
       const item = state.supplements.find(s => s.id === id);
       if (item) {
-        item.taken = !item.taken;
+        normalizeSupplementStockFields(item);
+        const becomingTaken = !item.taken;
+        item.taken = becomingTaken;
+        if (becomingTaken) {
+          item.kalanAdet = Math.max(0, item.kalanAdet - item.gunlukDoz);
+        } else {
+          item.kalanAdet = Math.min(item.toplamKutuAdedi, item.kalanAdet + item.gunlukDoz);
+        }
+        const kalanGun = Math.floor(item.kalanAdet / item.gunlukDoz);
         saveState();
         renderDailyTab();
-        showToast(item.taken ? "Takviye Alındı" : "İşaret Kaldırıldı", `${item.name} durumu güncellendi.`, item.taken ? "success" : "info");
+        showToast(
+          item.taken ? "İçtim / Alındı İşaretlendi" : "İşaret Kaldırıldı",
+          item.taken
+            ? `${item.name}: Kalan stok ${item.kalanAdet} tablet (${kalanGun} gün yetecek).`
+            : `${item.name} durumu geri alındı (Stok: ${item.kalanAdet}).`,
+          item.taken ? (kalanGun <= 3 ? "warning" : "success") : "info"
+        );
       }
     }
 
@@ -291,19 +425,458 @@ function renderDailyTab() {
       showToast("Su Tüketimi Eklendi", `+${amount} ml su kaydedildi.`, "success");
     }
 
+    /* =========================================================================
+       TAKVİYE EKLE MODALI -> "KUTU VE BARKOD / KAREKOD" & GEMINI VISION MOTORU
+       ========================================================================= */
+    let addSupHtml5QrInstance = null;
+    let addSupMediaStream = null;
+    let addSupScanLoopActive = false;
+
+    function populateAddSupQuickDbSelect() {
+      const sel = document.getElementById("addSupQuickDbSelect");
+      const badge = document.getElementById("addSupDbBadge");
+      const db = Array.isArray(window.VITA_SUPPLEMENT_DB) ? window.VITA_SUPPLEMENT_DB : [];
+      if (badge) {
+        badge.textContent = `${db.length} Takviye Aktif`;
+      }
+      if (!sel) return;
+      sel.innerHTML = `<option value="">— ${db.length} Popüler Takviyeden Seçin (Orzaks, VeNatura, Solgar, Magnimore, Möller's...) —</option>` +
+        db.map(item => `<option value="${escapeHtmlText(item.barcode)}">${escapeHtmlText(item.urunAdi)} (${escapeHtmlText(item.marka)}) — [${escapeHtmlText(item.barcode)}]</option>`).join("");
+    }
+
+    function stopScanner() {
+      addSupScanLoopActive = false;
+      if (addSupHtml5QrInstance) {
+        const inst = addSupHtml5QrInstance;
+        addSupHtml5QrInstance = null;
+        try {
+          Promise.resolve(inst.stop()).catch(() => {}).finally(() => {
+            try { inst.clear(); } catch (e) {}
+          });
+        } catch (e) {}
+      }
+      if (addSupMediaStream) {
+        try {
+          addSupMediaStream.getTracks().forEach(t => t.stop());
+        } catch (e) {}
+        addSupMediaStream = null;
+      }
+      const readerEl = document.getElementById("addSupQrReader");
+      if (readerEl) {
+        readerEl.querySelectorAll("video").forEach(v => {
+          try {
+            if (v.srcObject && typeof v.srcObject.getTracks === "function") {
+              v.srcObject.getTracks().forEach(t => t.stop());
+            }
+            v.pause();
+            v.srcObject = null;
+          } catch (e) {}
+        });
+      }
+      const videoEl = document.getElementById("addSupCameraVideo");
+      if (videoEl) {
+        try {
+          if (videoEl.srcObject && typeof videoEl.srcObject.getTracks === "function") {
+            videoEl.srcObject.getTracks().forEach(t => t.stop());
+          }
+          videoEl.pause();
+          videoEl.srcObject = null;
+        } catch (e) {}
+        videoEl.classList.add("hidden");
+      }
+      const wrapper = document.getElementById("addSupCameraViewportWrapper");
+      if (wrapper) wrapper.classList.add("hidden");
+      const startBtn = document.getElementById("btnAddSupStartCamera");
+      const stopBtn = document.getElementById("btnAddSupStopCamera");
+      if (startBtn) startBtn.classList.remove("hidden");
+      if (stopBtn) stopBtn.classList.add("hidden");
+    }
+
+    function enforceAddSupModalInlineVideo() {
+      const wrapper = document.getElementById("addSupCameraViewportWrapper");
+      if (!wrapper) return;
+      wrapper.querySelectorAll("video").forEach(v => {
+        v.setAttribute("playsinline", "true");
+        v.setAttribute("webkit-playsinline", "true");
+        v.setAttribute("muted", "true");
+        v.playsInline = true;
+        v.muted = true;
+        v.style.maxHeight = "220px";
+        v.style.width = "100%";
+        v.style.objectFit = "cover";
+      });
+    }
+
+    async function startAddSupModalScanner() {
+      stopScanner();
+      const wrapper = document.getElementById("addSupCameraViewportWrapper");
+      const readerEl = document.getElementById("addSupQrReader");
+      const videoEl = document.getElementById("addSupCameraVideo");
+      const statusEl = document.getElementById("addSupCameraLiveStatus");
+      const startBtn = document.getElementById("btnAddSupStartCamera");
+      const stopBtn = document.getElementById("btnAddSupStopCamera");
+      const fallbackBox = document.getElementById("addSupFallbackConfirmBox");
+      if (fallbackBox) fallbackBox.classList.add("hidden");
+
+      if (wrapper) wrapper.classList.remove("hidden");
+      if (startBtn) startBtn.classList.add("hidden");
+      if (stopBtn) stopBtn.classList.remove("hidden");
+      if (statusEl) statusEl.textContent = "Kamera hazırlanıyor (EAN-13 / Karekod)...";
+
+      if (typeof window.Html5Qrcode === "function" && readerEl) {
+        try {
+          readerEl.classList.remove("hidden");
+          addSupHtml5QrInstance = new window.Html5Qrcode("addSupQrReader");
+          await addSupHtml5QrInstance.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+            (decodedText) => {
+              if (decodedText) {
+                handleAddSupBarcodeDecoded(decodedText);
+              }
+            },
+            () => {}
+          );
+          enforceAddSupModalInlineVideo();
+          setTimeout(enforceAddSupModalInlineVideo, 350);
+          if (statusEl) statusEl.textContent = "Kamerayı takviye kutusunun barkoduna odaklayın...";
+          return;
+        } catch (err) {
+          addSupHtml5QrInstance = null;
+        }
+      }
+
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+        stopScanner();
+        showAddSupFeedback("Bu cihazda doğrudan kamera erişimi desteklenmiyor. Barkodu elle girebilir veya 'Fotoğraf Çek / AI ile Kutuyu Tanı' butonunu kullanabilirsiniz.", "warning");
+        return;
+      }
+
+      try {
+        addSupMediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 960 }, height: { ideal: 540 } },
+          audio: false
+        });
+        if (videoEl) {
+          videoEl.srcObject = addSupMediaStream;
+          videoEl.setAttribute("playsinline", "true");
+          videoEl.setAttribute("webkit-playsinline", "true");
+          videoEl.setAttribute("muted", "true");
+          videoEl.muted = true;
+          videoEl.classList.remove("hidden");
+          await videoEl.play();
+        }
+        if ("BarcodeDetector" in window) {
+          const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "qr_code", "data_matrix"] });
+          addSupScanLoopActive = true;
+          const scanTick = async () => {
+            if (!addSupScanLoopActive || !videoEl) return;
+            try {
+              const codes = await detector.detect(videoEl);
+              if (codes && codes.length > 0 && codes[0].rawValue) {
+                handleAddSupBarcodeDecoded(codes[0].rawValue);
+                return;
+              }
+            } catch (e) {}
+            if (addSupScanLoopActive) requestAnimationFrame(scanTick);
+          };
+          requestAnimationFrame(scanTick);
+        } else if (statusEl) {
+          statusEl.textContent = "Kamera açık. Barkod algılanamazsa 'Fotoğraf Çek / AI ile Kutuyu Tanı' butonuna dokunun.";
+        }
+      } catch (err) {
+        stopScanner();
+        showAddSupFeedback("Kamera izni alınamadı veya kamera başlatılamadı. Barkodu elle girebilir ya da kutu fotoğrafı çekebilirsiniz.", "warning");
+      }
+    }
+
+    function showAddSupFeedback(message, tone = "success") {
+      const box = document.getElementById("addSupBarcodeFeedbackBox");
+      if (!box) return;
+      box.classList.remove("hidden");
+      if (tone === "success") {
+        box.className = "rounded-xl border border-emerald-300 bg-emerald-50 p-2.5 text-xs font-bold text-emerald-950";
+      } else if (tone === "warning") {
+        box.className = "rounded-xl border border-amber-300 bg-amber-50 p-2.5 text-xs font-bold text-amber-950";
+      } else {
+        box.className = "rounded-xl border border-indigo-200 bg-indigo-50 p-2.5 text-xs font-bold text-indigo-950";
+      }
+      box.textContent = message;
+    }
+
+    function fillAddSupplementModalFormFromItem(item) {
+      if (!item) return;
+      const catalogSelect = document.getElementById("modalCatalogSelect");
+      if (catalogSelect) {
+        catalogSelect.value = "custom";
+        onCatalogSelectChange("custom");
+      }
+      const nameInput = document.getElementById("manualSupName");
+      const brandActiveInput = document.getElementById("manualSupBrandActive");
+      const formInput = document.getElementById("manualSupFormText");
+      const doseInput = document.getElementById("manualSupDose");
+      const boxCountInput = document.getElementById("manualSupBoxCount");
+      const remCountInput = document.getElementById("manualSupRemainingCount");
+      const dailyDoseInput = document.getElementById("manualSupDailyDose");
+      const timingSelect = document.getElementById("manualSupTiming");
+      const hungerInput = document.getElementById("manualSupHungerNote");
+
+      if (nameInput && item.urunAdi) nameInput.value = item.urunAdi;
+      if (brandActiveInput) {
+        const brandPart = (item.marka || "").trim();
+        const activePart = (item.etkenMadde || "").trim();
+        brandActiveInput.value = brandPart && activePart ? `${brandPart} — ${activePart}` : (brandPart || activePart || "");
+      }
+      if (formInput && item.form) formInput.value = item.form;
+      if (doseInput && item.dozaj) doseInput.value = item.dozaj;
+
+      const kutuAdedi = Number(item.kutuAdedi) > 0 ? Math.round(Number(item.kutuAdedi)) : 30;
+      const gunlukDoz = Number(item.gunlukDoz) > 0 ? Math.round(Number(item.gunlukDoz)) : 1;
+      if (boxCountInput) boxCountInput.value = String(kutuAdedi);
+      if (remCountInput) remCountInput.value = String(kutuAdedi);
+      if (dailyDoseInput) dailyDoseInput.value = String(gunlukDoz);
+
+      if (timingSelect && item.zamanBloku) {
+        const validOptions = ["Sabah", "Öğle", "Akşam", "Gece"];
+        if (validOptions.includes(item.zamanBloku)) {
+          timingSelect.value = item.zamanBloku;
+        }
+      }
+      if (hungerInput && item.aclikDurumu) {
+        hungerInput.value = item.aclikDurumu;
+      }
+
+      updateManualModalStockPreview(false);
+      if (typeof updateModalLiveInteractionPreview === "function") {
+        updateModalLiveInteractionPreview();
+      }
+    }
+
+    function handleAddSupBarcodeDecoded(decodedText) {
+      const cleanBarcode = String(decodedText || "").trim();
+      if (!cleanBarcode) {
+        showToast("Barkod Boş", "Lütfen geçerli bir EAN-13 barkod numarası girin veya okutun.", "warning");
+        return;
+      }
+
+      const barcodeInput = document.getElementById("addSupBarcodeInput");
+      if (barcodeInput) barcodeInput.value = cleanBarcode;
+
+      const fallbackBox = document.getElementById("addSupFallbackConfirmBox");
+      if (fallbackBox) fallbackBox.classList.add("hidden");
+
+      // Kamera video akışı arkada açık kalmayacak şekilde temiz kapatılsın
+      stopScanner();
+
+      // 1. ÖNCE VITA_PRESCRIPTION_DRUG_DB (Reçeteli İlaç Yerel Klinik Veri Tabanı) içerisinde ara
+      const rxDb = Array.isArray(window.VITA_PRESCRIPTION_DRUG_DB) ? window.VITA_PRESCRIPTION_DRUG_DB : [];
+      const rxFound = rxDb.find(item => item.barcode === cleanBarcode);
+
+      if (rxFound) {
+        if (typeof window.registerPrescriptionDrugToShield === "function") {
+          window.registerPrescriptionDrugToShield(rxFound, { openDrawer: true });
+        }
+        const depletionNotice = Array.isArray(rxFound.tuketilenBesinler) && rxFound.tuketilenBesinler.length > 0
+          ? ` • Tüketilen Besinler: ${rxFound.tuketilenBesinler.join(", ")} (Tahlil Takibi Önerilir)`
+          : "";
+        showAddSupFeedback(
+          `🛡️ Reçeteli İlaç Kalkanına Eklendi: ${rxFound.urunAdi} (${rxFound.etkenMadde} • ${rxFound.kategori}). Kural: ${rxFound.etkilesimKurali}${depletionNotice}`,
+          "warning"
+        );
+        return;
+      }
+
+      // 2. Bulunamazsa VITA_SUPPLEMENT_DB (Takviye Veri Tabanı) içerisinde ara
+      const supDb = Array.isArray(window.VITA_SUPPLEMENT_DB) ? window.VITA_SUPPLEMENT_DB : [];
+      const supFound = supDb.find(item => item.barcode === cleanBarcode);
+
+      if (supFound) {
+        fillAddSupplementModalFormFromItem(supFound);
+        const msg = `Ürün Tanındı: ${supFound.urunAdi}`;
+        showAddSupFeedback(`✅ ${msg} (${supFound.marka} • ${supFound.form} • ${supFound.dozaj} • ${supFound.kutuAdedi} Adet)`, "success");
+        if (window.SoundEffects) SoundEffects.playSuccess();
+        showToast(msg, `${supFound.marka} — ${supFound.etkenMadde} form alanlarına otomatik aktarıldı.`, "success");
+      } else {
+        // 3. İkisinde de yoksa: AI Kutu Tanıma Fallback
+        showAddSupFeedback(`⚠️ Ürün veritabanında bulunamadı (${cleanBarcode}). Kutu fotoğrafını çekerek AI ile tanımak ister misiniz?`, "warning");
+        if (fallbackBox) fallbackBox.classList.remove("hidden");
+        const confirmMsg = "Ürün veritabanında bulunamadı. Kutu fotoğrafını çekerek AI ile tanımak ister misiniz?";
+        if (typeof window.confirm === "function" && window.confirm(confirmMsg)) {
+          triggerGeminiBoxScan();
+        }
+      }
+    }
+
+    function triggerGeminiBoxScan() {
+      stopScanner();
+      const fileInput = document.getElementById("addSupAiPhotoInput");
+      if (fileInput) {
+        fileInput.value = "";
+        fileInput.click();
+      }
+    }
+
+    function convertAddSupFileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = String(reader.result || "");
+          const commaIdx = dataUrl.indexOf(",");
+          resolve(commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl);
+        };
+        reader.onerror = () => reject(new Error("Görsel okunamadı."));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function handleAddSupAiPhotoInput(event) {
+      const file = event?.target?.files?.[0];
+      if (!file) return;
+
+      const fallbackBox = document.getElementById("addSupFallbackConfirmBox");
+      if (fallbackBox) fallbackBox.classList.add("hidden");
+
+      const apiKey = (
+        localStorage.getItem("vita_gemini_api_key") ||
+        (typeof getGeminiApiKey === "function" ? getGeminiApiKey() : "") ||
+        ""
+      ).trim();
+
+      if (!apiKey) {
+        showAddSupFeedback("Gemini API anahtarı bulunamadı. Lütfen Ayarlar > Yapay Zeka bölümünden 'vita_gemini_api_key' anahtarınızı kaydedin.", "warning");
+        showToast("API Anahtarı Gerekli", "AI Kutu Tanıma için Ayarlar'dan Gemini API anahtarınızı girin.", "warning");
+        return;
+      }
+
+      showAddSupFeedback("⏳ Kutu fotoğrafı Yapay Zeka (Gemini Vision) ile analiz ediliyor, lütfen bekleyin...", "info");
+
+      try {
+        const base64Data = await convertAddSupFileToBase64(file);
+        const mimeType = file.type || "image/jpeg";
+        const promptText = 'Bu ilaç veya takviye kutusu üzerindeki ürün adını, markasını, etken maddesini, farmasötik formunu (tablet, kapsül, saşe, damla vb.), birim dozajını (mg, mcg, IU) ve kutudaki toplam adet bilgisini şu JSON formatında çıkar: {"urunAdi": "", "marka": "", "etkenMadde": "", "form": "", "dozaj": "", "kutuAdedi": 30, "gunlukDoz": 1, "zamanBloku": "Sabah", "aclikDurumu": "Tok"}. Sadece saf JSON döndür.';
+
+        const candidateModels = [
+          "gemini-2.0-flash",
+          "gemini-1.5-flash"
+        ];
+        let parsedJson = null;
+        let lastErr = null;
+
+        for (const modelName of candidateModels) {
+          try {
+            const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`;
+            const response = await fetch(endpoint, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{
+                  parts: [
+                    { text: promptText },
+                    { inline_data: { mime_type: mimeType, data: base64Data } }
+                  ]
+                }],
+                generationConfig: {
+                  temperature: 0.1,
+                  responseMimeType: "application/json"
+                }
+              })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error(data?.error?.message || `HTTP ${response.status}`);
+            }
+            const rawText = (data?.candidates?.[0]?.content?.parts || [])
+              .map(p => p.text || "")
+              .join("\n")
+              .trim();
+            const cleaned = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+            const firstBrace = cleaned.indexOf("{");
+            const lastBrace = cleaned.lastIndexOf("}");
+            parsedJson = JSON.parse(firstBrace >= 0 && lastBrace > firstBrace ? cleaned.slice(firstBrace, lastBrace + 1) : cleaned);
+            if (parsedJson) break;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+
+        if (!parsedJson) {
+          throw lastErr || new Error("Yapay zeka yanıtı ayrıştırılamadı.");
+        }
+
+        fillAddSupplementModalFormFromItem({
+          urunAdi: parsedJson.urunAdi || "",
+          marka: parsedJson.marka || "",
+          etkenMadde: parsedJson.etkenMadde || "",
+          form: parsedJson.form || "",
+          dozaj: parsedJson.dozaj || "",
+          kutuAdedi: Number(parsedJson.kutuAdedi) > 0 ? Number(parsedJson.kutuAdedi) : 30,
+          gunlukDoz: Number(parsedJson.gunlukDoz) > 0 ? Number(parsedJson.gunlukDoz) : 1,
+          zamanBloku: parsedJson.zamanBloku || "Sabah",
+          aclikDurumu: parsedJson.aclikDurumu || "Tok"
+        });
+
+        const recognizedTitle = parsedJson.urunAdi || "Kutu Bilgileri";
+        showAddSupFeedback(`✨ AI Kutu Tanıma Başarılı: ${recognizedTitle} form alanlarına aktarıldı.`, "success");
+        if (window.SoundEffects) SoundEffects.playSuccess();
+        showToast(`Ürün Tanındı: ${recognizedTitle}`, "Gemini Vision ile kutu bilgileri Takviye Ekle formuna dolduruldu.", "success");
+      } catch (err) {
+        showAddSupFeedback(`AI Kutu Tanıma hatası: ${err?.message || "Görsel analiz edilemedi."}`, "warning");
+        showToast("AI Kutu Tanıma Hatası", String(err?.message || "Lütfen tekrar deneyin."), "warning");
+      }
+    }
+
+    window.stopScanner = stopScanner;
+    window.startAddSupModalScanner = startAddSupModalScanner;
+    window.handleAddSupBarcodeDecoded = handleAddSupBarcodeDecoded;
+    window.triggerGeminiBoxScan = triggerGeminiBoxScan;
+    window.handleAddSupAiPhotoInput = handleAddSupAiPhotoInput;
+    window.fillAddSupplementModalFormFromItem = fillAddSupplementModalFormFromItem;
+
     function openAddSupplementModal() {
       const modal = document.getElementById("addSupplementModal");
       if (!modal) return;
       modal.classList.remove("hidden");
       modal.style.display = "flex";
+      stopScanner();
+      populateAddSupQuickDbSelect();
+
+      const barcodeInput = document.getElementById("addSupBarcodeInput");
+      const feedbackBox = document.getElementById("addSupBarcodeFeedbackBox");
+      const fallbackBox = document.getElementById("addSupFallbackConfirmBox");
+      if (barcodeInput) barcodeInput.value = "";
+      if (feedbackBox) { feedbackBox.classList.add("hidden"); feedbackBox.textContent = ""; }
+      if (fallbackBox) fallbackBox.classList.add("hidden");
+
+      const nameInput = document.getElementById("manualSupName");
+      const brandActiveInput = document.getElementById("manualSupBrandActive");
+      const formInput = document.getElementById("manualSupFormText");
+      const doseInput = document.getElementById("manualSupDose");
+      const hungerInput = document.getElementById("manualSupHungerNote");
+      const timingSelect = document.getElementById("manualSupTiming");
+      if (nameInput) nameInput.value = "";
+      if (brandActiveInput) brandActiveInput.value = "";
+      if (formInput) formInput.value = "";
+      if (doseInput) doseInput.value = "";
+      if (hungerInput) hungerInput.value = "";
+      if (timingSelect) timingSelect.value = "Sabah";
+
+      const boxInput = document.getElementById("manualSupBoxCount");
+      const remInput = document.getElementById("manualSupRemainingCount");
+      const dailyDoseInput = document.getElementById("manualSupDailyDose");
+      if (boxInput) boxInput.value = "30";
+      if (remInput) remInput.value = "30";
+      if (dailyDoseInput) dailyDoseInput.value = "1";
+      updateManualModalStockPreview(false);
+
       const catalogSelect = document.getElementById("modalCatalogSelect");
       if (catalogSelect) {
-        catalogSelect.value = "D3_K2";
-        onCatalogSelectChange("D3_K2");
+        catalogSelect.value = "custom";
+        onCatalogSelectChange("custom");
       }
     }
 
     function closeAddSupplementModal() {
+      stopScanner();
       const modal = document.getElementById("addSupplementModal");
       if (modal) { modal.classList.add("hidden"); modal.style.display = "none"; }
     }
@@ -315,17 +888,16 @@ function renderDailyTab() {
       const formSelect = document.getElementById("modalFormSelect");
       const quickPills = document.getElementById("modalFormQuickPills");
 
+      if (customNameBox) customNameBox.classList.remove("hidden");
+      if (customDoseBox) customDoseBox.classList.remove("hidden");
+
       if (catalogKey === "custom") {
-        if (customNameBox) customNameBox.classList.remove("hidden");
         if (formBox) formBox.classList.add("hidden");
-        if (customDoseBox) customDoseBox.classList.remove("hidden");
         if (typeof updateModalLiveInteractionPreview === "function") updateModalLiveInteractionPreview();
         return;
       }
 
-      if (customNameBox) customNameBox.classList.add("hidden");
       if (formBox) formBox.classList.remove("hidden");
-      if (customDoseBox) customDoseBox.classList.add("hidden");
 
       const cfg = FORM_DOSAGE_CONFIG[catalogKey];
       if (!cfg) return;
@@ -377,6 +949,18 @@ function renderDailyTab() {
       if (dosePrev) dosePrev.textContent = `${evaluated.doseText} (${evaluated.timing})`;
       const instPrev = document.getElementById("modalInstructionPreview");
       if (instPrev) instPrev.textContent = evaluated.instruction;
+
+      const nameInput = document.getElementById("manualSupName");
+      const formInput = document.getElementById("manualSupFormText");
+      const doseInput = document.getElementById("manualSupDose");
+      const timingSelect = document.getElementById("manualSupTiming");
+      const hungerInput = document.getElementById("manualSupHungerNote");
+      if (nameInput) nameInput.value = cfg.name;
+      if (formInput) formInput.value = chosenForm.replace('_', ' ');
+      if (doseInput) doseInput.value = evaluated.doseText;
+      if (timingSelect && evaluated.timing) timingSelect.value = evaluated.timing;
+      if (hungerInput && evaluated.instruction) hungerInput.value = evaluated.instruction;
+
       if (typeof updateModalLiveInteractionPreview === "function") updateModalLiveInteractionPreview();
     }
 
@@ -385,23 +969,51 @@ function renderDailyTab() {
 
       const nowDate = new Date();
       const todayIso = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, "0")}-${String(nowDate.getDate()).padStart(2, "0")}`;
+      const toplamKutuAdedi = Math.max(1, parseInt(document.getElementById("manualSupBoxCount")?.value, 10) || 30);
+      const kalanAdet = Math.max(0, parseInt(document.getElementById("manualSupRemainingCount")?.value, 10) ?? toplamKutuAdedi);
+      const gunlukDoz = Math.max(1, parseInt(document.getElementById("manualSupDailyDose")?.value, 10) || 1);
 
       if (catalogKey === "custom") {
-        const name = document.getElementById("manualSupName").value.trim();
-        const timing = document.getElementById("manualSupTiming").value;
-        const dose = document.getElementById("manualSupDose").value.trim() || "Etiket / hekim planındaki miktarı girin";
-        if (!name) { showToast("Eksik Ad", "Lütfen takviye adını giriniz.", "warning"); return; }
+        const name = (document.getElementById("manualSupName")?.value || "").trim();
+        const brandActive = (document.getElementById("manualSupBrandActive")?.value || "").trim();
+        const timing = document.getElementById("manualSupTiming")?.value || "Sabah";
+        const dose = (document.getElementById("manualSupDose")?.value || "").trim() || "Etiket / hekim planındaki miktarı girin";
+        const customForm = (document.getElementById("manualSupFormText")?.value || "").trim() || null;
+        const hungerNote = (document.getElementById("manualSupHungerNote")?.value || "").trim();
+        const barcodeVal = (document.getElementById("addSupBarcodeInput")?.value || "").trim() || null;
+
+        if (!name) { showToast("Eksik Ad", "Lütfen ürün adını giriniz veya barkod okutunuz.", "warning"); return; }
+
+        const subParts = [customForm, brandActive].filter(Boolean);
+        const instructionText = [
+          hungerNote ? `Açlık/Tokluk & Emilim: ${hungerNote}.` : "",
+          brandActive ? `İçerik: ${brandActive}.` : "",
+          "Hekiminizin belirttiği talimatlara uygun alınız."
+        ].filter(Boolean).join(" ");
 
         state.supplements.push({
           id: `sup_man_${Date.now()}`,
-          name, formKey: null, selectedForm: null, timing, doseText: dose,
-          subText: "Hekim Tavsiyeli Tanımlama", instruction: "Hekiminizin belirttiği talimatlara uygun alınız.",
-          addedDate: Date.now(), taken: false, scheduleDays: [1, 2, 3, 4, 5, 6, 0], scheduledDate: todayIso
+          name,
+          barcode: barcodeVal,
+          markaEtken: brandActive || null,
+          formKey: null,
+          selectedForm: customForm,
+          timing,
+          doseText: hungerNote ? `${dose} • ${hungerNote}` : dose,
+          aclikDurumu: hungerNote || null,
+          toplamKutuAdedi,
+          kalanAdet,
+          gunlukDoz,
+          subText: subParts.length ? subParts.join(" · ") : "Hekim Tavsiyeli Tanımlama",
+          instruction: instructionText,
+          addedDate: Date.now(),
+          taken: false,
+          scheduleDays: [1, 2, 3, 4, 5, 6, 0],
+          scheduledDate: todayIso
         });
       } else {
         const cfg = FORM_DOSAGE_CONFIG[catalogKey];
         const chosenForm = document.getElementById("modalFormSelect").value;
-        // This prototype uses an explicit daily schedule default; the user can edit the plan afterward.
         const scheduleDays = [1, 2, 3, 4, 5, 6, 0];
         const w = state.user ? state.user.weight : 70;
         const evaluated = cfg.forms[chosenForm](w);
@@ -413,12 +1025,16 @@ function renderDailyTab() {
           existing.subText = evaluated.subText;
           existing.timing = evaluated.timing;
           existing.instruction = evaluated.instruction;
+          existing.toplamKutuAdedi = toplamKutuAdedi;
+          existing.kalanAdet = kalanAdet;
+          existing.gunlukDoz = gunlukDoz;
           existing.scheduledDate = todayIso;
         } else {
           state.supplements.push({
             id: `sup_cat_${Date.now()}`,
             name: cfg.name, formKey: catalogKey, selectedForm: chosenForm,
             timing: evaluated.timing, doseText: evaluated.doseText,
+            toplamKutuAdedi, kalanAdet, gunlukDoz,
             subText: evaluated.subText, instruction: evaluated.instruction,
             addedDate: Date.now(), taken: false, scheduleDays, scheduledDate: todayIso
           });
@@ -430,7 +1046,7 @@ function renderDailyTab() {
       renderDailyTab();
       checkPendingSymptomReviews();
       detectSupplementConflicts();
-      showToast("Takviye Eklendi", "Takip listenize kaydedildi.", "success");
+      showToast("Takviye Eklendi", "Takip listenize ve kutu stok sayacına kaydedildi.", "success");
     }
 /* CDSS DEMOGRAFİ VE CANLI ÖZET SENKRONİZASYONU */
     function syncCDSSDemographics() {

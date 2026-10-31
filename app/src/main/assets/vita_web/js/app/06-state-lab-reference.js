@@ -203,13 +203,20 @@ let currentAuthMode = "login";
         return;
       }
       const nameEl = document.getElementById("barcodeSupplementName");
+      const formEl = document.getElementById("barcodeSupplementForm");
       const doseEl = document.getElementById("barcodeSupplementDose");
+      const boxCountEl = document.getElementById("barcodeSupplementBoxCount");
+      const dailyDoseEl = document.getElementById("barcodeSupplementDailyDose");
       const codeEl = document.getElementById("barcodeManualValue");
       const timeEl = document.getElementById("barcodeScheduleTime");
       const name = String(nameEl?.value || "").trim();
+      const formValue = String(formEl?.value || "").trim();
       const barcode = String(codeEl?.value || "").trim();
       const scheduleTime = String(timeEl?.value || "").trim();
       const doseNote = String(doseEl?.value || "").trim();
+      const toplamKutuAdedi = Math.max(1, parseInt(boxCountEl?.value, 10) || 30);
+      const gunlukDoz = Math.max(1, parseInt(dailyDoseEl?.value, 10) || 1);
+      const kalanAdet = toplamKutuAdedi;
       const scheduleDays = Array.from(document.querySelectorAll('input[name="barcodeScheduleDay"]:checked')).map(input => Number(input.value)).filter(Number.isInteger);
       if (!name) { showToast("Ürün adı gerekli", "Kutu üzerindeki ürün adını doğrulayıp girin; barkod numarası tek başına ürün adını belirlemez.", "warning"); nameEl?.focus(); return; }
       if (typeof classifyScannedProductCategory === "function" && classifyScannedProductCategory(name) === "medication") {
@@ -227,13 +234,16 @@ let currentAuthMode = "login";
         id: `sup_barcode_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         name,
         formKey: null,
-        selectedForm: "Barkodla eklenen ürün",
+        selectedForm: formValue || "Barkodla eklenen ürün",
         timing: getSupplementTimingGroup(scheduleTime),
         scheduleTime,
         scheduleDays,
         barcode: barcode || null,
+        toplamKutuAdedi,
+        kalanAdet,
+        gunlukDoz,
         doseText: doseNote || "Doz bilgisi eklenmedi — kutu/hekim talimatını doğrulayın",
-        subText: `Barkod ile kaydedildi${barcode ? ` · Kod: ${barcode}` : ""}`,
+        subText: `${formValue ? `${formValue} · ` : ""}Barkod/AI ile kaydedildi${barcode ? ` · Kod: ${barcode}` : ""}`,
         instruction: `${getBarcodeSupplementSafetyNote(name)} Barkod numarası ürün kimliğini, içeriğini veya güvenliğini doğrulamaz. Ürün etiketi/prospektüsü ve hekim/eczacı talimatı önceliklidir; burada doz önerisi yapılmaz.`, 
         addedDate: Date.now(),
         taken: false,
@@ -247,7 +257,7 @@ let currentAuthMode = "login";
       checkPendingSymptomReviews();
       detectSupplementConflicts();
       if (typeof navigateToView === "function") navigateToView("view-home");
-      showToast(saved === false ? "Çizelge güncellendi" : "Takviye çizelgeye eklendi", saved === false ? `${name} bu oturumda görünüyor; tarayıcıya kalıcı kaydetme başarısız olmuş olabilir.` : `${name}, ${getSupplementTimeLabel(item)} saatine ve ${getSupplementScheduleDaysLabel(item)} günlerine kaydedildi. Doz/etkileşim ayrıca doğrulanmalıdır.`, saved === false ? "warning" : "success");
+      showToast(saved === false ? "Çizelge güncellendi" : "Takviye çizelgeye eklendi", saved === false ? `${name} bu oturumda görünüyor; tarayıcıya kalıcı kaydetme başarısız olmuş olabilir.` : `${name} (${toplamKutuAdedi} adet, günlük doz: ${gunlukDoz}) çizelgeye kaydedildi.`, saved === false ? "warning" : "success");
     }
 
     function resetApplicationDOMAndState() {

@@ -554,9 +554,11 @@
 </button>
 </div>
 <div class="flex flex-wrap gap-1.5 pt-0.5" id="dailyProtocolQuickMedChips"></div>
+<!-- Misantha Tipi İlaç-Vitamin Tüketim Analizi (Drug-Induced Nutrient Depletion) Çekmecesi / Mini-Modal -->
+<div class="hidden rounded-2xl border-2 border-amber-300 bg-gradient-to-r from-amber-50 via-white to-orange-50/70 p-3.5 shadow-sm space-y-2" id="drugDepletionMiniModal" role="region" aria-label="İlaç-Vitamin Tüketim Analizi Detayı"></div>
 <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
 <div class="relative flex-1">
-<input class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-semibold text-navy-900 focus:outline-none focus:border-teal-500" id="quickAddMedInput" onkeydown="if(event.key==='Enter'){event.preventDefault(); addQuickMedicationFromInput();}" placeholder="Reçeteli ilaç adı ekle (Örn: Euthyrox, Coumadin, Pantpas, Glucophage, Cipro, Fosamax...)" type="text"/>
+<input class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-xs font-semibold text-navy-900 focus:outline-none focus:border-teal-500" id="quickAddMedInput" onkeydown="if(event.key==='Enter'){event.preventDefault(); addQuickMedicationFromInput();}" placeholder="Reçeteli ilaç adı ekle (Örn: Glucophage, Pantpas, Atorvastatin, Lasix, Ramipril, Euthyrox...)" type="text"/>
 </div>
 <button class="px-3.5 py-2 rounded-xl bg-navy-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0" onclick="if(window.SoundEffects) SoundEffects.playClick(); addQuickMedicationFromInput()" type="button">
 <i class="fa-solid fa-shield-heart text-teal-300"></i> İlaç Ekle &amp; Denetle
@@ -2845,6 +2847,14 @@ Kapat
 <input class="rounded text-emerald-600 focus:ring-emerald-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="bisphosphonate"/>
 <span class="font-semibold text-emerald-950">Bisfosfonat / Kemik Erimesi İlacı (Alendronat, Risedronat, Fosamax vb.)</span>
 </label>
+<label class="flex items-center gap-2 p-2 rounded-lg border border-purple-200 bg-purple-50/70 hover:bg-purple-100/60 cursor-pointer">
+<input class="rounded text-purple-600 focus:ring-purple-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="statin"/>
+<span class="font-semibold text-purple-950">Kolesterol İlacı / Statin Türevleri (Atorvastatin, Rosuvastatin, Lipitor, Crestor vb.)</span>
+</label>
+<label class="flex items-center gap-2 p-2 rounded-lg border border-cyan-200 bg-cyan-50/70 hover:bg-cyan-100/60 cursor-pointer">
+<input class="rounded text-cyan-600 focus:ring-cyan-500" name="modal_chronic" onchange="if(document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" type="checkbox" value="ace_arb"/>
+<span class="font-semibold text-cyan-950">Tansiyon İlacı — ACE İnhibitörü / ARB (Ramipril, Enalapril, Valsartan, Losartan vb.)</span>
+</label>
 <div class="pt-1">
 <label class="text-[11px] font-bold text-slate-700 block mb-1" for="modalCustomMedications">Diğer Düzenli Reçeteli İlaçlarınız (Virgülle Ayırarak Yazabilirsiniz)</label>
 <input class="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:border-teal-500 bg-white" id="modalCustomMedications" oninput="if(this.value.trim() && document.getElementById('modalChronicNone')) document.getElementById('modalChronicNone').checked = false;" placeholder="Örn: Euthyrox, Coumadin, Pantpas, Glucophage, Cipro..." type="text"/>
@@ -2865,7 +2875,7 @@ Kapat
 </div>
 <!-- MODAL: MANUEL TAKVİYE VE FARMASÖTİK FORM EKLEME -->
 <div class="fixed inset-0 z-50 bg-navy-950/70 backdrop-blur-sm hidden items-center justify-center p-4" id="addSupplementModal">
-<div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 relative max-h-[92vh] overflow-y-auto">
+<div class="bg-white rounded-3xl max-w-xl w-full p-5 sm:p-7 shadow-2xl border border-slate-200 relative max-h-[92vh] overflow-y-auto">
 <button class="absolute right-5 top-5 text-slate-400 hover:text-slate-700 cursor-pointer" onclick="if(window.SoundEffects) SoundEffects.playClick(); closeAddSupplementModal()">
 <i class="fa-solid fa-xmark text-lg"></i>
 </button>
@@ -2874,14 +2884,93 @@ Kapat
 <i class="fa-solid fa-shapes"></i>
 </div>
 <div>
-<h3 class="text-base font-black text-navy-900">Takviye ve Farmasötik Form Ekle</h3>
-<p class="text-xs text-slate-500">Hekiminizin önerdiği ajanı ve formu seçiniz.</p>
+<h3 class="text-base font-black text-navy-900">Takviye Ekle &amp; Farmasötik Form Seç</h3>
+<p class="text-xs text-slate-500">Kutu barkodunu okutun, AI ile kutuyu tanıtın veya takviye bilgilerini girin.</p>
 </div>
 </div>
-<div class="mt-5 space-y-4 text-xs">
+<div class="mt-4 space-y-4 text-xs">
+<!-- KUTU VE BARKOD / KAREKOD BÖLÜMÜ (Yalnızca Takviye Ekle Modalı İçinde) -->
+<div class="p-3.5 sm:p-4 rounded-2xl border-2 border-teal-300 bg-gradient-to-br from-teal-50/90 via-white to-sky-50/60 space-y-3 shadow-xs" id="addSupBoxBarcodeSection">
+<div class="flex flex-wrap items-center justify-between gap-2">
+<div class="flex items-center gap-2">
+<span class="w-7 h-7 rounded-xl bg-teal-600 text-white flex items-center justify-center text-xs shadow-xs">
+<i class="fa-solid fa-barcode"></i>
+</span>
 <div>
-<label class="font-bold text-slate-700 block mb-1">Takviye Bileşeni Seçin</label>
-<select class="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-bold text-navy-900 focus:outline-none focus:border-teal-500 bg-white" id="modalCatalogSelect" onchange="if(window.SoundEffects) SoundEffects.playClick(); onCatalogSelectChange(this.value)">
+<h4 class="text-xs font-black text-navy-900">Kutu ve Barkod / Karekod</h4>
+<p class="text-[10px] text-slate-500">EAN-13 Barkod (30 Popüler TR Takviyesi) • Kamera • Gemini Vision AI</p>
+</div>
+</div>
+<span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300" id="addSupDbBadge">30 Takviye Aktif</span>
+</div>
+
+<!-- Hızlı TR Takviye Veritabanı Seçici (30 Ürün) -->
+<div>
+<label class="block text-[10px] font-bold text-slate-600 mb-1" for="addSupQuickDbSelect">Popüler Türkiye Takviye Veritabanından Hızlı Seç (veya Aşağıdan Barkod Girin / Okutun):</label>
+<select class="w-full px-3 py-2 rounded-xl border border-teal-200 bg-white text-xs font-bold text-navy-900 focus:outline-none focus:border-teal-500" id="addSupQuickDbSelect" onchange="if(this.value) { document.getElementById('addSupBarcodeInput').value = this.value; handleAddSupBarcodeDecoded(this.value); }">
+<option value="">— 30 Popüler Takviyeden Seçin (Orzaks, VeNatura, Solgar, Magnimore, Möller's...) —</option>
+</select>
+</div>
+
+<!-- Manuel Barkod / Karekod Giriş Kutusu -->
+<div>
+<label class="block text-[10px] font-bold text-slate-700 mb-1" for="addSupBarcodeInput">Barkod / Karekod Numarası (EAN-13)</label>
+<div class="flex gap-2">
+<input autocomplete="off" class="min-w-0 flex-1 px-3 py-2 rounded-xl border border-slate-300 bg-white font-mono text-xs font-bold text-navy-900 focus:outline-none focus:border-teal-500" id="addSupBarcodeInput" maxlength="64" onkeydown="if(event.key==='Enter'){event.preventDefault(); handleAddSupBarcodeDecoded(this.value);}" placeholder="EAN-13 barkod girin (Örn: 8697595871234)" type="text"/>
+<button class="px-3.5 py-2 rounded-xl bg-navy-900 hover:bg-slate-800 text-white font-bold text-xs transition cursor-pointer shrink-0 flex items-center gap-1.5" id="btnAddSupLookupBarcode" onclick="if(window.SoundEffects) SoundEffects.playClick(); handleAddSupBarcodeDecoded(document.getElementById('addSupBarcodeInput').value)" type="button">
+<i class="fa-solid fa-magnifying-glass text-teal-300"></i>
+<span>Barkod Sorgula</span>
+</button>
+</div>
+</div>
+
+<!-- Kamera Aç / Barkod Tara ve Fotoğraf Çek / AI ile Kutuyu Tanı Butonları -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+<button class="w-full py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs" id="btnAddSupStartCamera" onclick="if(window.SoundEffects) SoundEffects.playClick(); startAddSupModalScanner()" type="button">
+<i class="fa-solid fa-camera"></i>
+<span>Kamerayı Aç / Barkod Tara</span>
+</button>
+<button class="hidden w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs" id="btnAddSupStopCamera" onclick="if(window.SoundEffects) SoundEffects.playClick(); stopScanner()" type="button">
+<i class="fa-solid fa-stop"></i>
+<span>Kamerayı Kapat</span>
+</button>
+<button class="w-full py-2.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs" id="btnAddSupAiBoxScan" onclick="if(window.SoundEffects) SoundEffects.playClick(); triggerGeminiBoxScan()" type="button">
+<i class="fa-solid fa-wand-magic-sparkles"></i>
+<span>Fotoğraf Çek / AI ile Kutuyu Tanı</span>
+</button>
+<input accept="image/*" capture="environment" class="hidden" id="addSupAiPhotoInput" onchange="handleAddSupAiPhotoInput(event)" type="file"/>
+</div>
+
+<!-- Kameranın Açıldığı Video Alanı (playsinline, muted, mobil donmayı önleyen hafif konfigürasyon) -->
+<div class="hidden rounded-2xl border-2 border-teal-400 bg-navy-950 p-2.5 text-center text-white space-y-2" id="addSupCameraViewportWrapper">
+<div class="relative mx-auto w-full max-w-sm overflow-hidden rounded-xl bg-slate-900 min-h-44 flex items-center justify-center">
+<div class="w-full max-h-56 overflow-hidden" id="addSupQrReader"></div>
+<video autoplay="" class="hidden w-full max-h-56 object-contain" id="addSupCameraVideo" muted="" playsinline="" webkit-playsinline=""></video>
+</div>
+<p class="text-[10px] text-teal-200 font-semibold" id="addSupCameraLiveStatus">Kamerayı takviye kutusunun barkoduna odaklayın...</p>
+</div>
+
+<!-- Barkod / AI Durum Bildirimi ve Fallback Onay Kutusu -->
+<div aria-live="polite" class="hidden rounded-xl border p-2.5 text-xs" id="addSupBarcodeFeedbackBox"></div>
+<div aria-live="assertive" class="hidden rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 space-y-2" id="addSupFallbackConfirmBox">
+<p class="font-bold leading-relaxed"><i class="fa-solid fa-circle-question text-amber-600 mr-1"></i>Barkod yerel veritabanında bulunamadı. Kutunun fotoğrafını çekerek Yapay Zeka (AI) ile bilgileri otomatik doldurmak ister misiniz?</p>
+<div class="flex flex-wrap items-center gap-2">
+<button class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] transition cursor-pointer flex items-center gap-1.5" onclick="if(window.SoundEffects) SoundEffects.playClick(); triggerGeminiBoxScan()" type="button">
+<i class="fa-solid fa-camera-retro"></i>
+<span>Evet, Kutu Fotoğrafı Çek / AI ile Doldur</span>
+</button>
+<button class="px-2.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-600 border border-slate-300 font-bold text-[11px] transition cursor-pointer" onclick="document.getElementById('addSupFallbackConfirmBox').classList.add('hidden')" type="button">
+Elle Dolduracağım
+</button>
+</div>
+</div>
+</div>
+
+<!-- Hızlı Katalog Seçimi (İsteğe Bağlı Şablon) -->
+<div>
+<label class="font-bold text-slate-700 block mb-1" for="modalCatalogSelect">Hızlı Takviye Şablonu (veya Barkod / Özel Ürün)</label>
+<select class="w-full px-3 py-2 rounded-xl border border-slate-300 font-bold text-navy-900 focus:outline-none focus:border-teal-500 bg-white" id="modalCatalogSelect" onchange="if(window.SoundEffects) SoundEffects.playClick(); onCatalogSelectChange(this.value)">
+<option value="custom">📦 Barkod / AI / Özel Takviye Formu (Tüm Alanlar Açık)</option>
 <option value="D3_K2">☀️ D3 + K2 Vitamini (Damla / Kapsül / Sprey)</option>
 <option value="Omega3">🐟 Omega-3 Balık Yağı (Yumuşak Kapsül / Sıvı Yağ)</option>
 <option value="Demir">🩸 Demir (Fe) (Saşe / Kapsül / Tablet)</option>
@@ -2890,18 +2979,14 @@ Kapat
 <option value="Folat">🌱 Folat / Metilfolat (B9 - 5-MTHF Kapsül / Dilaltı / Tablet)</option>
 <option value="Kolajen">🧬 Kolajen Peptitleri (Saşe / Sıvı Shot / Tablet)</option>
 <option value="Kreatin">💧 Kreatin Monohidrat (Toz / Kapsül)</option>
-<option value="custom">✏️ Diğer / Özel Takviye Gir</option>
 </select>
 </div>
-<div class="hidden" id="modalCustomNameContainer">
-<label class="font-bold text-slate-700 block mb-1">Özel Takviye veya İlaç Adı</label>
-<input class="w-full px-3 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:border-teal-500" id="manualSupName" oninput="if(typeof updateModalLiveInteractionPreview === 'function') updateModalLiveInteractionPreview()" placeholder="Örn: Kalsiyum Sitrat, Çinko, Levotiroksin, Koenzim Q10..." type="text"/>
-</div>
-<div class="p-3.5 bg-teal-50/70 border border-teal-200 rounded-2xl space-y-2" id="modalFormSelectorContainer">
+
+<div class="hidden p-3.5 bg-teal-50/70 border border-teal-200 rounded-2xl space-y-2" id="modalFormSelectorContainer">
 <div class="flex items-center justify-between">
 <label class="text-[11px] font-black text-teal-950 flex items-center gap-1.5">
 <i class="fa-solid fa-flask-vial text-teal-600"></i> Hangi Farmasötik Formda Alacaksınız?
-            </label>
+</label>
 </div>
 <select class="form-selector w-full text-xs font-black px-3 py-2 rounded-xl border border-teal-300 bg-white text-teal-950 focus:outline-none focus:border-teal-500 cursor-pointer shadow-sm" id="modalFormSelect" onchange="if(window.SoundEffects) SoundEffects.playClick(); onModalFormOptionChange(this.value)">
 </select>
@@ -2912,25 +2997,71 @@ Kapat
 </div>
 <p class="text-[10px] text-teal-900/80 italic leading-relaxed" id="modalInstructionPreview">-</p>
 </div>
-<div class="hidden grid grid-cols-2 gap-3" id="modalCustomDoseContainer">
+
+<!-- OTOMATİK DOLDURULAN TAKVİYE EKLE FORM ALANLARI -->
+<div class="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5" id="modalCustomNameContainer">
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
 <div>
-<label class="font-bold text-slate-700 block mb-1">Zamanlama</label>
-<select class="w-full px-2.5 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:border-teal-500 bg-white" id="manualSupTiming" onchange="if(typeof updateModalLiveInteractionPreview === 'function') updateModalLiveInteractionPreview()">
+<label class="font-bold text-slate-700 block mb-1" for="manualSupName">Ürün Adı *</label>
+<input class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-bold text-navy-900 focus:outline-none focus:border-teal-500" id="manualSupName" oninput="if(typeof updateModalLiveInteractionPreview === 'function') updateModalLiveInteractionPreview()" placeholder="Örn: Ocean Vitamin D3 1000 IU" type="text"/>
+</div>
+<div>
+<label class="font-bold text-slate-700 block mb-1" for="manualSupBrandActive">Marka / Etken Madde</label>
+<input class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:outline-none focus:border-teal-500" id="manualSupBrandActive" oninput="if(typeof updateModalLiveInteractionPreview === 'function') updateModalLiveInteractionPreview()" placeholder="Örn: Orzaks — Kolekalsiferol (Vitamin D3)" type="text"/>
+</div>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5" id="modalCustomDoseContainer">
+<div>
+<label class="font-bold text-slate-700 block mb-1" for="manualSupFormText">Form (Tablet / Kapsül / Damla)</label>
+<input class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-semibold text-navy-900 focus:outline-none focus:border-teal-500" id="manualSupFormText" placeholder="Örn: Oral Damla / Sprey, Tablet, Yumuşak Kapsül" type="text"/>
+</div>
+<div>
+<label class="font-bold text-slate-700 block mb-1" for="manualSupDose">Birim Dozaj</label>
+<input class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-semibold text-navy-900 focus:outline-none focus:border-teal-500" id="manualSupDose" oninput="if(typeof updateModalLiveInteractionPreview === 'function') updateModalLiveInteractionPreview()" placeholder="Örn: 1000 IU (25 mcg) / puf" type="text"/>
+</div>
+<div>
+<label class="font-bold text-slate-700 block mb-1" for="manualSupTiming">Zaman Bloku (Sabah / Öğle / Akşam)</label>
+<select class="w-full px-2.5 py-2 rounded-xl border border-slate-300 font-bold text-navy-900 focus:outline-none focus:border-teal-500 bg-white" id="manualSupTiming" onchange="if(typeof updateModalLiveInteractionPreview === 'function') updateModalLiveInteractionPreview()">
 <option value="Sabah">Sabah (08:00)</option>
 <option value="Öğle">Öğle (13:00)</option>
 <option value="Akşam">Akşam (21:30)</option>
+<option value="Gece">Gece (23:00 - Yatmadan Önce)</option>
 </select>
 </div>
 <div>
-<label class="font-bold text-slate-700 block mb-1">Dozaj / Not</label>
-<input class="w-full px-3 py-2 rounded-xl border border-slate-300 font-semibold focus:outline-none focus:border-teal-500" id="manualSupDose" oninput="if(typeof updateModalLiveInteractionPreview === 'function') updateModalLiveInteractionPreview()" placeholder="Örn: 1 Kapsül Tok" type="text"/>
+<label class="font-bold text-slate-700 block mb-1" for="manualSupHungerNote">Açlık / Tokluk Notu</label>
+<input class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white font-semibold text-slate-800 focus:outline-none focus:border-teal-500" id="manualSupHungerNote" placeholder="Örn: Tok (Yağlı Kahvaltı İle)" type="text"/>
 </div>
+</div>
+</div>
+
+<!-- Misantha Tipi Kutu Stok Miktarı, Günlük Doz ve Kalan Gün Sayacı Girişi -->
+<div class="p-3.5 rounded-2xl border border-indigo-200 bg-indigo-50/60 space-y-2.5" id="modalMisanthaStockBox">
+<div class="flex items-center justify-between gap-2">
+<span class="text-[11px] font-black text-indigo-950 flex items-center gap-1.5">
+<i class="fa-solid fa-boxes-stacked text-indigo-600"></i> Kutu Adedi (Stok) &amp; Günlük Doz Sayacı
+</span>
+<span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-white text-indigo-800 border border-indigo-200" id="modalMisanthaDaysPreviewBadge">30 gün yetecek</span>
+</div>
+<div class="grid grid-cols-3 gap-2.5">
+<div>
+<label class="block text-[10px] font-bold text-slate-700 mb-1" for="manualSupBoxCount">Kutu Adedi (Stok)</label>
+<input class="w-full px-2.5 py-2 rounded-xl border border-indigo-200 bg-white text-xs font-black text-navy-900 focus:outline-none focus:border-indigo-500" id="manualSupBoxCount" min="1" max="1000" oninput="updateManualModalStockPreview(true)" type="number" value="30"/>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-slate-700 mb-1" for="manualSupRemainingCount">Kalan Adet</label>
+<input class="w-full px-2.5 py-2 rounded-xl border border-indigo-200 bg-white text-xs font-black text-navy-900 focus:outline-none focus:border-indigo-500" id="manualSupRemainingCount" min="0" max="1000" oninput="updateManualModalStockPreview(false)" type="number" value="30"/>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-slate-700 mb-1" for="manualSupDailyDose">Günlük Doz</label>
+<input class="w-full px-2.5 py-2 rounded-xl border border-indigo-200 bg-white text-xs font-black text-navy-900 focus:outline-none focus:border-indigo-500" id="manualSupDailyDose" min="1" max="50" oninput="updateManualModalStockPreview(false)" type="number" value="1"/>
+</div>
+</div>
+<p class="text-[10px] text-indigo-900/80 leading-snug">Dozu "İçtim / Alındı" işaretlediğinizde kalan adet günlük doz kadar düşer; 3 gün veya altına indiğinde kritik stok uyarısı verilir.</p>
 </div>
 <!-- Gerçek Zamanlı Ekleme Öncesi Klinik Etkileşim Ön İzleme Kutusu -->
 <div class="hidden rounded-2xl border p-3.5 space-y-2 text-xs" id="modalLiveInteractionWarning" role="status" aria-live="polite"></div>
-<button class="w-full mt-2 py-2.5 rounded-xl border border-sky-300 bg-sky-50 text-sky-900 font-bold hover:bg-sky-100 transition flex items-center justify-center gap-2" onclick="if(window.SoundEffects) SoundEffects.playClick(); openBarcodeScannerModal('supplement')" type="button">
-<i class="fa-solid fa-barcode"></i><span>📷 Kutu Karekodu / Barkod Tara (Yalnızca Takviye)</span>
-</button>
 <button class="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-medTeal-600 to-teal-500 text-white font-bold shadow-md hover:from-medTeal-700 hover:to-teal-600 transition active:scale-95 cursor-pointer flex items-center justify-center gap-2" onclick="if(window.SoundEffects) SoundEffects.playClick(); commitManualSupplement()">
 <i class="fa-solid fa-plus text-sm"></i>
 <span>Seçilen Formda Takip Listeme Ekle</span>
@@ -2964,51 +3095,111 @@ Kapat
 <span>İlaç Seç ve Denetle (Reçeteli/Genel)</span>
 </button>
 </div>
-<section class="rounded-2xl border border-slate-300 bg-navy-950 p-3 sm:p-4 text-center text-white">
+<!-- Misantha Tarzı 3 Kanallı Arama ve Tarama Seçici (a: Adıyla Arama, b: Barkod/Karekod Elle Girme, c: Kamerayla Barkod/Karekod Tarama) -->
+<div class="rounded-2xl border border-teal-200 bg-teal-50/50 p-2.5 space-y-2">
+<div class="flex items-center justify-between gap-2 px-1">
+<span class="text-[11px] font-black text-navy-900"><i class="fa-solid fa-Compass text-teal-600 mr-1"></i>3 Kanallı Ürün &amp; Barkod Arama Sistemi</span>
+<span class="text-[10px] font-bold text-teal-800 bg-white px-2 py-0.5 rounded-lg border border-teal-200" id="barcodeTrDbCountBadge">TR Veritabanı Aktif</span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5" role="tablist" aria-label="3 Kanallı Barkod ve Ürün Arama Seçenekleri">
+<button class="py-2 px-2.5 rounded-xl text-[11px] font-black transition flex items-center justify-center gap-1.5 cursor-pointer bg-navy-900 text-white shadow-xs" id="btnScannerChannelName" onclick="if(window.SoundEffects) SoundEffects.playClick(); switchScannerChannel('name')" type="button">
+<i class="fa-solid fa-magnifying-glass text-teal-300"></i>
+<span>a) Adıyla Arama</span>
+</button>
+<button class="py-2 px-2.5 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer bg-white text-slate-700 border border-slate-200 hover:bg-slate-50" id="btnScannerChannelManual" onclick="if(window.SoundEffects) SoundEffects.playClick(); switchScannerChannel('manual')" type="button">
+<i class="fa-solid fa-keyboard text-indigo-600"></i>
+<span>b) Barkod / Karekod Elle Gir</span>
+</button>
+<button class="py-2 px-2.5 rounded-xl text-[11px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer bg-white text-slate-700 border border-slate-200 hover:bg-slate-50" id="btnScannerChannelCamera" onclick="if(window.SoundEffects) SoundEffects.playClick(); switchScannerChannel('camera')" type="button">
+<i class="fa-solid fa-camera text-teal-600"></i>
+<span>c) Kamerayla Barkod / Karekod</span>
+</button>
+</div>
+</div>
+
+<!-- KANAL A: ADIYLA ARAMA (Otomatik Tamamlama / Canlı Filtreleme) -->
+<section class="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4 space-y-2.5" id="scannerChannelPanelName">
+<div class="flex items-center justify-between gap-2">
+<label class="text-xs font-black text-navy-900" for="barcodeNameAutocompleteInput"><i class="fa-solid fa-magnifying-glass mr-1.5 text-teal-700"></i>a) Ürün veya İlaç Adıyla Otomatik Tamamlamalı Arama</label>
+<span class="text-[10px] font-semibold text-slate-500">Anında filtreleme</span>
+</div>
+<div class="relative">
+<input autocomplete="off" class="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs font-bold text-navy-900 focus:border-teal-500 focus:outline-none" id="barcodeNameAutocompleteInput" oninput="onScannerNameSearchInput(this.value)" placeholder="Ürün adı, marka veya etken madde yazın (Örn: Ocean D3, Venatura Magnezyum, Glucophage, Pantpas...)" type="text"/>
+<div class="mt-2 max-h-48 overflow-y-auto rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 shadow-xs" id="barcodeNameAutocompleteResults"></div>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-slate-600 mb-1" for="barcodeTrDatabaseQuickSelect" id="barcodeTrDatabaseQuickSelectLabel">Türkiye'de Kayıtlı Yaygın Vitamin &amp; Gıda Takviyelerinden Hızlı Seç (EAN-13):</label>
+<select class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-navy-900 focus:border-teal-500 focus:outline-none" id="barcodeTrDatabaseQuickSelect" onchange="if(this.value) { document.getElementById('barcodeManualValue').value = this.value; useManualBarcodeValue(); }">
+<option value="">— Türkiye Barkod Veritabanından Ürün Seçin —</option>
+</select>
+</div>
+</section>
+
+<!-- KANAL B: BARKOD / KAREKOD NUMARASINI ELLE GİRME -->
+<section class="rounded-2xl border border-slate-200 p-3 sm:p-4 space-y-2.5" id="scannerChannelPanelManual">
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+<h3 class="text-xs font-black text-navy-900"><i class="fa-solid fa-barcode mr-1.5 text-indigo-700"></i>b) Barkod (EAN-13) veya Karekod (DataMatrix / GTIN) Numarasını Elle Girin</h3>
+<span class="text-[10px] font-semibold text-slate-500">EAN-13 / GS1 DataMatrix</span>
+</div>
+<div class="flex gap-2"><input autocomplete="off" class="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono focus:border-teal-500 focus:outline-none" id="barcodeManualValue" maxlength="180" onkeydown="if(event.key==='Enter'){event.preventDefault(); useManualBarcodeValue();}" placeholder="EAN-13 barkod (Örn: 8697595870112) veya karekod numarası girin" type="text"/><button class="min-h-10 rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-slate-700 shrink-0 cursor-pointer" onclick="useManualBarcodeValue()" type="button">Sorgula &amp; Eşle</button></div>
+</section>
+
+<!-- KANAL C: KAMERAYLA BARKOD (EAN-13) VEYA KAREKOD (DATAMATRIX) TARAMA -->
+<section class="rounded-2xl border border-slate-300 bg-navy-950 p-3 sm:p-4 text-center text-white" id="scannerChannelPanelCamera">
 <div class="relative mx-auto min-h-40 w-full max-w-md overflow-hidden rounded-2xl border-2 border-teal-300/80 bg-slate-900 flex items-center justify-center" id="barcodeCameraViewport">
-<video aria-label="Barkod tarama kamera görüntüsü" autoplay="" class="hidden w-full max-h-64 object-contain" id="barcodeCameraVideo" muted="" playsinline=""></video>
+<video aria-label="Barkod tarama kamera görüntüsü" autoplay="" class="hidden w-full max-h-64 object-contain" id="barcodeCameraVideo" muted="" playsinline="" webkit-playsinline=""></video>
 <div class="hidden w-full max-h-64 overflow-hidden" id="html5QrCodeReaderContainer"></div>
 <div class="py-7 px-4" id="barcodeCameraPlaceholder">
 <i class="fa-solid fa-camera text-5xl text-teal-200/90"></i>
-<p class="mt-3 text-xs font-bold">Kamerayı açıp kutudaki barkoda odaklayın</p>
-<p class="mt-1 text-[10px] text-slate-300">EAN-13 (869...), Karekod, DataMatrix ve çizgili barkodlar taranır.</p>
+<p class="mt-3 text-xs font-bold">c) Kamerayı açıp kutudaki Barkod (EAN-13) veya Karekod (DataMatrix) üzerine odaklayın</p>
+<p class="mt-1 text-[10px] text-slate-300">Mobil ve Android WebView uyumlu (playsinline, muted, 250×250 karekod/barkod çerçevesi).</p>
 </div>
 <div class="hidden pointer-events-none absolute inset-x-5 top-1/2 h-0.5 bg-teal-300 shadow-[0_0_18px_5px_rgba(20,184,166,.45)] vita-scanner-line" id="barcodeCameraAim"></div>
 </div>
 <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
-<button class="min-h-10 rounded-xl bg-teal-500 px-4 py-2 text-xs font-black text-navy-950 hover:bg-teal-400" id="barcodeStartCameraBtn" onclick="if(window.SoundEffects) SoundEffects.playClick(); startBarcodeCameraScan()" type="button"><i class="fa-solid fa-camera mr-1"></i> Kamerayı Aç ve Barkod Oku</button>
-<button class="hidden min-h-10 rounded-xl border border-white/30 bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20" id="barcodeStopCameraBtn" onclick="stopBarcodeCameraScan()" type="button"><i class="fa-solid fa-stop mr-1"></i> Taramayı Durdur</button>
+<button class="min-h-10 rounded-xl bg-teal-500 px-4 py-2 text-xs font-black text-navy-950 hover:bg-teal-400 cursor-pointer" id="barcodeStartCameraBtn" onclick="if(window.SoundEffects) SoundEffects.playClick(); startBarcodeCameraScan()" type="button"><i class="fa-solid fa-camera mr-1"></i> Kamerayı Aç ve Barkod / Karekod Oku</button>
+<button class="hidden min-h-10 rounded-xl border border-white/30 bg-white/10 px-4 py-2 text-xs font-bold text-white hover:bg-white/20 cursor-pointer" id="barcodeStopCameraBtn" onclick="stopBarcodeCameraScan()" type="button"><i class="fa-solid fa-stop mr-1"></i> Taramayı Durdur</button>
 </div>
 <p aria-live="polite" class="mt-2 text-[10px] text-slate-300" id="barcodeCameraStatus">Kamera başlatılmadı.</p>
 </section>
+
 <section class="rounded-2xl border border-slate-200 p-3 sm:p-4 space-y-2.5">
-<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-<h3 class="text-xs font-black text-navy-900"><i class="fa-solid fa-keyboard mr-1.5 text-teal-700"></i>Türkiye EAN-13 Barkod / Ürün Arama</h3>
-<span class="text-[10px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-200" id="barcodeTrDbCountBadge">TR Veritabanı Aktif</span>
-</div>
-<!-- Türkiye Veritabanı Hızlı Seçim / Filtreli Liste -->
-<div>
-<label class="block text-[10px] font-bold text-slate-600 mb-1" for="barcodeTrDatabaseQuickSelect" id="barcodeTrDatabaseQuickSelectLabel">Türkiye'de Kayıtlı Yaygın Vitamin &amp; Gıda Takviyelerinden Hızlı Seç (EAN-13):</label>
-<select class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-bold text-navy-900 focus:border-teal-500 focus:outline-none" id="barcodeTrDatabaseQuickSelect" onchange="if(this.value) { document.getElementById('barcodeManualValue').value = this.value; useManualBarcodeValue(); }">
-<option value="">— Türkiye Barkod Veritabanından Ürün Seçin veya Aşağıya Barkod Yazın —</option>
-</select>
-</div>
-<div class="flex gap-2"><input autocomplete="off" class="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2 text-xs font-mono focus:border-teal-500 focus:outline-none" id="barcodeManualValue" maxlength="180" onkeydown="if(event.key==='Enter'){event.preventDefault(); useManualBarcodeValue();}" placeholder="EAN-13 barkod (Örn: 8699756800105) veya ürün adı yazın" type="text"/><button class="min-h-10 rounded-xl bg-slate-800 px-3.5 py-2 text-xs font-bold text-white hover:bg-slate-700 shrink-0" onclick="useManualBarcodeValue()" type="button">Sorgula &amp; Eşle</button></div>
 <div aria-live="polite" class="hidden rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-950" id="barcodeDecodedResult"></div>
 <!-- Kategori Filtre / Kısıtlama Uyarı Kutusu (Takviye alanında ilaç okutulursa veya ilaç alanında takviye okutulursa) -->
 <div aria-live="assertive" class="hidden rounded-xl border-2 border-rose-300 bg-rose-50 p-3 text-xs text-rose-950 space-y-2" id="barcodeCategoryFilterAlert" role="alert"></div>
 <div aria-live="polite" class="hidden rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-700" id="barcodeProductLookupStatus"></div>
 <!-- MOD 1: TAKVİYE EKLEME PANELİ (Yalnızca Vitamin ve Gıda Takviyeleri İçin) -->
 <div class="hidden mt-3 rounded-2xl border-2 border-teal-300 bg-teal-50 p-3 sm:p-4 space-y-3" id="barcodeAddSchedulePanel">
-<div><h4 class="text-sm font-black text-teal-950"><i class="fa-solid fa-calendar-plus mr-1.5"></i> Bulunan takviyeyi günlük çizelgeye ekle</h4><p class="mt-1 text-[10px] leading-relaxed text-teal-900">Bu alanda yalnızca <strong>vitaminler ve gıda takviyeleri</strong> günlük çizelgeye eklenir. Ürün adını ve etiket bilgisini kontrol ettikten sonra kaydedin.</p></div>
+<div><h4 class="text-sm font-black text-teal-950"><i class="fa-solid fa-calendar-plus mr-1.5"></i> Bulunan takviyeyi günlük çizelgeye ekle</h4><p class="mt-1 text-[10px] leading-relaxed text-teal-900">Bu alanda yalnızca <strong>vitaminler ve gıda takviyeleri</strong> günlük çizelgeye eklenir. Ürün adını, kutu stok adedini ve etiket bilgisini kontrol ettikten sonra kaydedin.</p></div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
 <div>
-<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeSupplementName">Vitamin / Gıda Takviyesi Adı *</label>
+<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeSupplementName">Ürün Adı (Vitamin / Gıda Takviyesi) *</label>
 <input autocomplete="off" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-navy-900 focus:border-teal-500 focus:outline-none" id="barcodeSupplementName" maxlength="120" oninput="suggestBarcodeScheduleFromName()" placeholder="Örn. Ocean Vitamin D3 K2 Damla" type="text"/>
 </div>
 <div>
-<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeSupplementDose">Etken Madde / Kutuda Yazan Kullanım Notu</label>
+<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeSupplementForm">Farmasötik Form (Tablet, Kapsül, Saşe, Damla vb.)</label>
+<input autocomplete="off" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-navy-900 focus:border-teal-500 focus:outline-none" id="barcodeSupplementForm" maxlength="60" placeholder="Örn. Tablet, Yumuşak Kapsül, Saşe, Damla" type="text"/>
+</div>
+</div>
+<div>
+<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeSupplementDose">Etken Madde &amp; Birim Dozajı (mg, mcg, IU)</label>
 <input autocomplete="off" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-xs focus:border-teal-500 focus:outline-none" id="barcodeSupplementDose" maxlength="160" placeholder="Örn. 1000 IU D3 + 11.25 mcg K2 / Günde 1 damla tok" type="text"/>
 <p class="mt-1 text-[9px] text-slate-500">Bu alan tedavi/doz önerisi üretmez. Etiketi, prospektüsü veya hekim/eczacı talimatını esas alın.</p>
+</div>
+<!-- Misantha Kutu Stok Miktarı ve Günlük Doz -->
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-2.5 rounded-xl bg-white border border-teal-200">
+<div>
+<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeSupplementBoxCount">Kutu Stok Miktarı (Toplam Adet)</label>
+<input class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-black text-navy-900 focus:border-teal-500 focus:outline-none" id="barcodeSupplementBoxCount" min="1" max="1000" oninput="updateBarcodeModalStockPreview()" type="number" value="30"/>
+</div>
+<div>
+<label class="mb-1 block text-[10px] font-bold text-slate-700" for="barcodeSupplementDailyDose">Günlük Doz (Adet/Damla)</label>
+<input class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-black text-navy-900 focus:border-teal-500 focus:outline-none" id="barcodeSupplementDailyDose" min="1" max="50" oninput="updateBarcodeModalStockPreview()" type="number" value="1"/>
+</div>
+<div class="col-span-2 sm:col-span-1 flex flex-col justify-center">
+<span class="text-[9px] font-bold text-slate-500 uppercase">Hesaplanan Süre</span>
+<strong class="text-xs font-black text-teal-800 mt-0.5" id="barcodeSupplementDaysPreview">30 gün yetecek</strong>
+</div>
 </div>
 <div class="rounded-xl border border-indigo-200 bg-white p-3">
 <button class="min-h-10 w-full rounded-xl border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-900 hover:bg-indigo-100" onclick="askVitaAIAboutBarcodeSupplement()" type="button"><i class="fa-solid fa-comment-medical mr-1.5"></i> VitaAI'ye etkileşim / kullanım sorusu hazırla</button>
@@ -3098,8 +3289,10 @@ Kapat
 <script src="js/app/05-clinical-rules.js"></script>
 <script src="js/app/06-state-lab-reference.js"></script>
 <script src="js/app/07-session-backup-fhir.js"></script>
+<script src="js/prescription_drugs_db.js"></script>
 <script src="js/app/08-pdf-onboarding-conflicts.js"></script>
 <script src="js/app/09-symptom-review-storage.js"></script>
+<script src="js/supplement_db.js"></script>
 <script src="js/app/10-daily-tracking-deprescribing.js"></script>
 <script src="js/app/11-cdss-analysis.js"></script>
 <script src="js/app/12-report-notifications-ai-chat.js"></script>

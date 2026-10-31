@@ -1223,21 +1223,26 @@ function getDoctorReportMode() {
     }
 
     function getGeminiApiKey() {
-      // Eski sürümlerin kalıcı anahtarını bir kez temizle; bundan sonra anahtar yalnızca sayfa belleğinde tutulur.
-      if (!geminiLegacyStorageCleared) {
-        safeLocalStorageRemoveItem("vitatakip_gemini_api_key");
-        geminiLegacyStorageCleared = true;
+      const storedKey = String(safeLocalStorageGetItem("vita_gemini_api_key") || "").trim();
+      if (storedKey) {
+        geminiApiKeyMemory = storedKey;
+        return storedKey;
       }
       return geminiApiKeyMemory;
     }
 
     function saveGeminiApiKey(val) {
       geminiApiKeyMemory = String(val || "").trim();
+      if (geminiApiKeyMemory) {
+        safeLocalStorageSetItem("vita_gemini_api_key", geminiApiKeyMemory);
+      } else {
+        safeLocalStorageRemoveItem("vita_gemini_api_key");
+      }
       const input = document.getElementById("drawerGeminiApiKeyInput");
       if (input) input.value = "";
       updateApiKeyUI();
       if (geminiApiKeyMemory) {
-        showToast("API Anahtarı Oturuma Alındı", "Gemini anahtarı yalnızca bu sayfa açıkken bellekte tutulur; yenilemede tekrar girmeniz gerekir.", "success");
+        showToast("API Anahtarı Kaydedildi", "Gemini API anahtarı (vita_gemini_api_key) kaydedildi ve yapay zeka kutu tanıma aktif edildi.", "success");
       } else {
         showToast("API Anahtarı Kaldırıldı", "Sistem yerel klinik yanıt motoruna geçti.", "info");
       }

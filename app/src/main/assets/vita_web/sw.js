@@ -1,6 +1,6 @@
 /* VitaTakip servis çalışanı: çevrimdışı açılış için uygulama dosyalarını önbelleğe alır.
    Dosyalarda değişiklik yaptığınızda CACHE_VERSION değerini artırın ki kullanıcılar yeni sürümü alsın. */
-const CACHE_VERSION = 'vitatakip-v21';
+const CACHE_VERSION = 'vitatakip-v24';
 const CORE_FILES = [
   "./",
   "index.html",
@@ -21,6 +21,8 @@ const CORE_FILES = [
   "js/recharts-lab-dashboard.js",
   "js/pwa-notification-checklist.js",
   "js/simplify-ui.js",
+  "js/supplement_db.js",
+  "js/prescription_drugs_db.js",
   "js/sw-register.js",
   "js/ui-enhancements.js",
   "js/visual-reference.js",

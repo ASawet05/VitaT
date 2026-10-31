@@ -555,7 +555,7 @@ main .border-2.border-rose-500, main .border-2.border-rose-400 {
 }
 
 /* ==========================================================================
-   GÖREV 1 & GÖREV 2 EK BİLEŞEN STİLLERİ
+   GÖREV 1 & GÖREV 2 EK BİLEŞEN STİLLERİ + MİSANTHA 4 TEMEL SİSTEM STİLLERİ
    ========================================================================== */
 #barcodeScannerModal {
   z-index: 10080 !important;
@@ -564,4 +564,91 @@ main .border-2.border-rose-500, main .border-2.border-rose-400 {
   scroll-margin-top: 5.5rem;
 }
 
+/* Misantha Kamera Optimizasyonu: Mobil ve Android WebView'da tam ekrana fırlamayı engelle */
+#html5QrCodeReaderContainer video,
+#barcodeCameraVideo {
+  width: 100% !important;
+  max-height: 260px !important;
+  object-fit: cover !important;
+  border-radius: 0.75rem;
+}
 
+/* Misantha Kutu, Stok ve Kalan Gün Sayacı Rozetleri */
+.misantha-stock-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #e2e8f0;
+}
+.misantha-stock-critical-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 900;
+  background: #fff1f2;
+  color: #be123c;
+  border: 1.5px solid #fda4af;
+  box-shadow: 0 1px 4px rgba(225, 29, 72, 0.12);
+}
+.misantha-stock-normal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 800;
+  background: #f0fdfa;
+  color: #0f766e;
+  border: 1px solid #99f6e4;
+}
+.misantha-refill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 0.55rem;
+  font-size: 10px;
+  font-weight: 800;
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+  cursor: pointer;
+}
+.misantha-refill-btn:hover {
+  background: #e0e7ff;
+}
+
+/* Misantha İlaç-Vitamin Etkileşimi Etiketi */
+.misantha-depletion-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 9.5px;
+  font-weight: 900;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  cursor: pointer;
+}
+.misantha-depletion-tag:hover {
+  background: #fde68a;
+}
+
+/* Takviye Ekle Modalı -> Kutu ve Barkod / Karekod Kamera Video Konfigürasyonu */
+#addSupQrReader video,
+#addSupCameraVideo {
+  max-height: 220px !important;
+  width: 100% !important;
+  object-fit: cover !important;
+  border-radius: 0.75rem;
+}
