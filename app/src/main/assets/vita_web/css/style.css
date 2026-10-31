@@ -686,3 +686,10 @@ body.vita-cloud-modal-open > .vita-mobile-nav {
   object-fit: cover !important;
   border-radius: 0.75rem;
 }
+
+#view-clinical-results.show:not(.hidden) {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+

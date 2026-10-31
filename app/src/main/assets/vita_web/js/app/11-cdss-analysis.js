@@ -264,7 +264,83 @@ function renderNeyimInlineTriageResult(resultData, { age, gender, creatinine, sy
   }
 }
 
-function runCDSSAnalysis() {
+function syncSelectedSymptomsFromDOM() {
+  if (!(state.selectedSymptoms instanceof Set)) {
+    state.selectedSymptoms = new Set(Array.isArray(state.selectedSymptoms) ? state.selectedSymptoms : []);
+  }
+  const neyimRoot = document.getElementById("view-neyim") || document;
+  neyimRoot.querySelectorAll(".anamnesis-card").forEach(card => {
+    const match = (card.getAttribute("onclick") || "").match(/toggleAnamnesisCard\(this,\s*'([^']+)'\)/);
+    if (!match || !match[1]) return;
+    const key = match[1];
+    const isCardSelected =
+      card.classList.contains("border-indigo-500") ||
+      card.classList.contains("is-selected") ||
+      card.classList.contains("selected") ||
+      card.getAttribute("aria-pressed") === "true";
+    if (isCardSelected) {
+      state.selectedSymptoms.add(key);
+    }
+  });
+  return Array.from(state.selectedSymptoms);
+}
+
+function showClinicalResultsPage() {
+  if (typeof navigateToView === "function") {
+    navigateToView("view-clinical-results");
+  }
+  const allViews = ["view-home", "view-labs", "view-neyim", "view-clinical-results", "view-report", "view-settings"];
+  allViews.forEach(viewId => {
+    const viewEl = document.getElementById(viewId);
+    if (!viewEl) return;
+    if (viewId === "view-clinical-results") {
+      viewEl.classList.remove("hidden");
+      viewEl.classList.add("show", "active");
+      viewEl.style.display = "block";
+      viewEl.removeAttribute("hidden");
+      viewEl.setAttribute("aria-hidden", "false");
+      viewEl.dataset.viewState = "show";
+    } else {
+      viewEl.classList.add("hidden");
+      viewEl.classList.remove("show", "active");
+      viewEl.style.display = "none";
+      viewEl.setAttribute("aria-hidden", "true");
+      viewEl.dataset.viewState = "hidden";
+    }
+  });
+
+  const emptyState = document.getElementById("cdssResultsEmptyState");
+  const overview = document.getElementById("cdssResultsOverview");
+  const resultContainer = document.getElementById("cdssResultContainer");
+  const triageBanner = document.getElementById("clinicalResultsTriageEgfrBanner");
+
+  if (emptyState) {
+    emptyState.classList.add("hidden");
+    emptyState.classList.remove("show");
+  }
+  if (overview) {
+    overview.classList.remove("hidden");
+    overview.classList.add("show");
+    overview.style.display = "block";
+  }
+  if (resultContainer) {
+    resultContainer.classList.remove("hidden");
+    resultContainer.classList.add("show");
+    resultContainer.style.display = "block";
+  }
+  if (triageBanner && triageBanner.innerHTML.trim() !== "") {
+    triageBanner.classList.remove("hidden");
+    triageBanner.classList.add("show");
+    triageBanner.style.display = "block";
+  }
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function runCDSSAnalysis(event) {
+  if (event && typeof event.preventDefault === "function") {
+    event.preventDefault();
+  }
   const errBanner = document.getElementById("neyimTriageErrorBanner");
   if (errBanner) {
     errBanner.classList.add("hidden");
@@ -276,13 +352,17 @@ function runCDSSAnalysis() {
       state.user = { ...defaultUserProfile };
     }
 
-    // Tahlil sayfasından, geçmiş tahlillerden ve profilden verileri otomatik çek
+    // 1. Kullanıcının seçtiği tüm semptomları DOM ve state üzerinden senkronize et
+    const symptomsList = syncSelectedSymptomsFromDOM();
+
+    // 2. Tahlil sayfasından, geçmiş tahlillerden ve profilden eGFR & laboratuvar verilerini otomatik çek
     const labCtx = window.VitaLabInsights ? VitaLabInsights.cdssInputs() : null;
     const labs = labCtx ? labCtx.values : (state.labValues || {});
 
     const ageEl = document.getElementById("neyimInputAge");
     const genderEl = document.getElementById("neyimInputGender");
     const creatEl = document.getElementById("neyimInputCreatinine");
+    const labPageCreatEl = document.getElementById("inputLabCreatinine");
 
     const rawAgeStr = (ageEl && ageEl.dataset.userEdited === "true" && String(ageEl.value || "").trim() !== "")
       ? String(ageEl.value).trim()
@@ -297,7 +377,11 @@ function runCDSSAnalysis() {
       : (state.user.gender === "E" ? "E" : "K");
 
     let parsedCreatinine = null;
-    const rawCreatFromLab = labs.creatinine ?? state.labValues?.creatinine ?? state.labHistory?.[0]?.creatinine;
+    const rawCreatFromLab =
+      labs.creatinine ??
+      state.labValues?.creatinine ??
+      state.labHistory?.[0]?.creatinine ??
+      (labPageCreatEl && String(labPageCreatEl.value || "").trim() !== "" ? labPageCreatEl.value : null);
     const rawCreatFromInput = (creatEl && creatEl.dataset.userEdited === "true")
       ? String(creatEl.value || "").trim().replace(",", ".")
       : "";
@@ -323,18 +407,16 @@ function runCDSSAnalysis() {
       state.labValues.creatinine = parsedCreatinine;
     }
 
-    const symptomsList = Array.from(state.selectedSymptoms || []);
-
     const btn = document.getElementById("btnRunCDSS");
     if (btn) {
       btn.disabled = true;
       btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Anamnez Triyajı &amp; Klinik Karar Analizi Hazırlanıyor...</span>`;
     }
 
-    // Tam CDSS motorunu çalıştır (Tahliller + Belirtiler + İlaçlar + Profil)
+    // 3. Tam CDSS motorunu çalıştır (Tahliller + Belirtiler + İlaçlar + Profil)
     executeCDSSRules();
 
-    // Triyaj ve eGFR kartını oluştur ve hem NeyimVar hem Klinik Karar Analizi sayfasına bas
+    // 4. Triyaj ve eGFR verilerini hesapla ve merkezi state nesnesine kaydet
     const triageData = evaluateAnamnesisTriageAndEgfr({
       symptomsList,
       age: parsedAge,
@@ -342,6 +424,55 @@ function runCDSSAnalysis() {
       creatinine: parsedCreatinine,
       labs
     });
+
+    const selectedSymptomDetails = symptomsList.map(key => {
+      const meta = (typeof ANAMNESIS_DICTIONARY !== "undefined" && ANAMNESIS_DICTIONARY[key]) ? ANAMNESIS_DICTIONARY[key] : null;
+      return {
+        key,
+        symptomName: meta ? meta.symptomName : key,
+        medicalName: meta ? meta.medicalName : key,
+        question: meta ? meta.question : key,
+        catId: meta ? meta.catId : null,
+        nutrients: meta && Array.isArray(meta.nutrients) ? [...meta.nutrients] : [],
+        suggestedLab: meta ? (meta.suggestedLab || "") : ""
+      };
+    });
+
+    const anamnesisAndEgfrState = {
+      selectedSymptoms: [...symptomsList],
+      selectedSymptomDetails,
+      symptomCount: symptomsList.length,
+      egfrData: {
+        age: parsedAge,
+        gender: parsedGender,
+        creatinine: parsedCreatinine,
+        egfr: triageData.egfrResult ? triageData.egfrResult.egfr : null,
+        stage: triageData.egfrResult ? (triageData.egfrResult.stage || triageData.egfrResult.stageCode) : null,
+        stageCode: triageData.egfrResult ? (triageData.egfrResult.stageCode || triageData.egfrResult.stage) : null,
+        stageName: triageData.egfrResult ? (triageData.egfrResult.stageName || triageData.egfrResult.desc) : null,
+        riskLevel: triageData.egfrResult ? triageData.egfrResult.riskLevel : null,
+        clinicalNote: triageData.egfrResult ? (triageData.egfrResult.clinicalNote || triageData.egfrResult.interpretationNote) : null
+      },
+      triage: {
+        triageLevel: triageData.triageLevel,
+        triageCode: triageData.triageCode,
+        triageSummary: triageData.triageSummary,
+        triageReasons: [...(triageData.triageReasons || [])]
+      },
+      analyzedAt: new Date().toISOString()
+    };
+
+    state.anamnesisTriageState = anamnesisAndEgfrState;
+    window.vitaAnamnesisTriageState = anamnesisAndEgfrState;
+    if (state.lastCDSS && typeof state.lastCDSS === "object") {
+      state.lastCDSS.anamnesisTriageState = anamnesisAndEgfrState;
+      state.lastCDSS.selectedSymptoms = [...symptomsList];
+      state.lastCDSS.egfrData = anamnesisAndEgfrState.egfrData;
+    }
+    if (typeof saveState === "function") {
+      saveState();
+    }
+
     renderNeyimInlineTriageResult(triageData, {
       age: parsedAge,
       gender: parsedGender,
@@ -356,16 +487,15 @@ function runCDSSAnalysis() {
     }
     if (window.SoundEffects) SoundEffects.playSuccess();
 
-    // Kullanıcı "Anamnez Triyaj ve eGFR Analiz" tuşuna bastığında doğrudan Klinik Karar Analizi sayfasına yönlendir
-    if (typeof navigateToView === "function") {
-      navigateToView("view-clinical-results");
-    }
+    // 5. view-clinical-results sayfasını 'show' durumuna getirerek hastayı o sayfaya yönlendir
+    showClinicalResultsPage();
 
     showToast(
       "Klinik Karar Analizi Hazır",
-      `${triageData.triageLevel}${triageData.egfrResult ? ` · eGFR: ${triageData.egfrResult.egfr} mL/dk (${triageData.egfrResult.stageCode})` : ""}`,
+      `${triageData.triageLevel}${triageData.egfrResult ? ` · eGFR: ${triageData.egfrResult.egfr} mL/dk (${triageData.egfrResult.stageCode || triageData.egfrResult.stage})` : ""}`,
       "success"
     );
+    return anamnesisAndEgfrState;
   } catch (err) {
     console.error("Anamnez Triyaj ve eGFR Analiz hatası:", err);
     const btn = document.getElementById("btnRunCDSS");
@@ -373,23 +503,20 @@ function runCDSSAnalysis() {
       btn.disabled = false;
       btn.innerHTML = `<i class="fa-solid fa-microchip"></i> <span>Anamnez Triyaj ve eGFR Analiz</span>`;
     }
-    if (typeof navigateToView === "function") {
-      navigateToView("view-clinical-results");
-    }
+    showClinicalResultsPage();
+    return null;
   }
 }
 
-// DOM hazır olduğunda #btnRunCDSS ve #view-neyim girdilerini güvenli şekilde bağla
+window.runCDSSAnalysis = runCDSSAnalysis;
+window.handleAnamnesisTriageAndEgfrAnalysis = runCDSSAnalysis;
+window.showClinicalResultsPage = showClinicalResultsPage;
+
+// DOM hazır olduğunda #btnRunCDSS onclick tetikleyicisini koru ve bağla
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("btnRunCDSS");
-  if (btn && !btn.dataset.cdssListenerBound) {
-    btn.dataset.cdssListenerBound = "true";
-    btn.removeAttribute("onclick");
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      if (window.SoundEffects) SoundEffects.playClick();
-      runCDSSAnalysis();
-    });
+  if (btn) {
+    btn.setAttribute("onclick", "if(window.SoundEffects) SoundEffects.playClick(); runCDSSAnalysis(event)");
   }
   hydrateNeyimInlineInputsFromState();
 });

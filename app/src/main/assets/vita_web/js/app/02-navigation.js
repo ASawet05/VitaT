@@ -114,12 +114,23 @@ function openAppDrawer() {
       const allViews = ["view-home", "view-labs", "view-neyim", "view-clinical-results", "view-report", "view-settings"];
       allViews.forEach(v => {
         const el = document.getElementById(v);
-        if (el) el.classList.add("hidden");
+        if (el) {
+          el.classList.add("hidden");
+          el.classList.remove("show", "active");
+          el.style.display = "";
+          el.setAttribute("aria-hidden", "true");
+          el.dataset.viewState = "hidden";
+        }
       });
 
       const target = document.getElementById(viewId);
       if (target) {
         target.classList.remove("hidden", "vita-view-enter");
+        target.classList.add("show", "active");
+        target.style.display = "block";
+        target.removeAttribute("hidden");
+        target.setAttribute("aria-hidden", "false");
+        target.dataset.viewState = "show";
         void target.offsetWidth;
         target.classList.add("vita-view-enter");
         target.addEventListener("animationend", () => target.classList.remove("vita-view-enter"), { once: true });
@@ -216,8 +227,14 @@ function openAppDrawer() {
       if (synthesisHint) synthesisHint.classList.toggle("hidden", Boolean(state.lastCDSS));
       const emptyState = document.getElementById("cdssResultsEmptyState");
       const overview = document.getElementById("cdssResultsOverview");
-      if (emptyState) emptyState.classList.toggle("hidden", Boolean(state.lastCDSS));
-      if (overview) overview.classList.toggle("hidden", !state.lastCDSS);
+      if (emptyState) {
+        emptyState.classList.toggle("hidden", Boolean(state.lastCDSS));
+        emptyState.classList.toggle("show", !state.lastCDSS);
+      }
+      if (overview) {
+        overview.classList.toggle("hidden", !state.lastCDSS);
+        overview.classList.toggle("show", Boolean(state.lastCDSS));
+      }
       const findingCount = document.getElementById("cdssOverviewFindingCount");
       if (findingCount && state.lastCDSS) {
         const findings = Array.isArray(state.lastCDSS.findings) ? state.lastCDSS.findings.length : 0;

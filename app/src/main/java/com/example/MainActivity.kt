@@ -97,7 +97,11 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.credentials.CredentialManager
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -589,6 +593,26 @@ fun VitaTakipWebPortalScreen(
         )
     }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, webViewRef) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                webViewRef?.evaluateJavascript(
+                    """
+                    if (typeof window.updateCameraPermissionUI === 'function') { window.updateCameraPermissionUI(); }
+                    if (typeof window.updateNotificationToggleUI === 'function') { window.updateNotificationToggleUI(); }
+                    if (typeof window.renderPwaSmartNotificationChecklist === 'function') { window.renderPwaSmartNotificationChecklist(); }
+                    """.trimIndent(),
+                    null
+                )
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     BackHandler {
         val wv = webViewRef
         if (wv != null) {
@@ -889,7 +913,7 @@ fun VitaTakipWebPortalScreen(
                         }
                     }
 
-                    loadUrl("file:///android_asset/vita_web/index.html?v=25")
+                    loadUrl("file:///android_asset/vita_web/index.html?v=27")
                 }
             },
             update = { webView ->

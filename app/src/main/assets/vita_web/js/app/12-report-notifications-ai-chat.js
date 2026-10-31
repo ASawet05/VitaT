@@ -1150,8 +1150,59 @@ function getDoctorReportMode() {
     /*   KAMERA ERİŞİM İZNİ YÖNETİMİ (AYARLAR -> İZİNLER & BARKOD / AI KAMERA)    */
     /* ========================================================================= */
     let cachedCameraPermState = safeLocalStorageGetItem("vitatakip_camera_perm_status") || "prompt";
+    let pendingNativeCameraPermResolvers = [];
+
+    function isCameraAppConsentEnabled() {
+      const val = safeLocalStorageGetItem("vitatakip_camera_app_approved");
+      // Varsayılan olarak açık (kullanıcı Ayarlar > İzinler menüsünden açıkça kapatmadıysa)
+      return val !== "false";
+    }
+
+    function setCameraAppConsentEnabled(enabled) {
+      safeLocalStorageSetItem("vitatakip_camera_app_approved", enabled ? "true" : "false");
+    }
+
+    async function queryCameraPermissionStatus() {
+      const appApproved = isCameraAppConsentEnabled();
+      let osStatus = cachedCameraPermState || "prompt";
+
+      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.getCameraPermissionStatus === "function") {
+        try {
+          const nativeSt = String(window.AndroidVitaBridge.getCameraPermissionStatus() || "").trim().toLowerCase();
+          if (nativeSt === "granted" || nativeSt === "denied" || nativeSt === "prompt") {
+            osStatus = nativeSt;
+          }
+        } catch (_) {}
+      } else if (navigator.permissions && typeof navigator.permissions.query === "function") {
+        try {
+          const permObj = await navigator.permissions.query({ name: "camera" });
+          if (permObj && permObj.state) {
+            osStatus = permObj.state;
+            permObj.onchange = () => {
+              updateCameraPermissionUI();
+            };
+          }
+        } catch (_) {}
+      }
+
+      cachedCameraPermState = osStatus;
+      safeLocalStorageSetItem("vitatakip_camera_perm_status", osStatus);
+
+      let effectiveStatus = osStatus;
+      if (!appApproved) {
+        effectiveStatus = "revoked_in_settings";
+      }
+
+      return {
+        granted: appApproved && osStatus === "granted",
+        osStatus,
+        appApproved,
+        effectiveStatus
+      };
+    }
 
     function isCameraPermissionGranted() {
+      if (!isCameraAppConsentEnabled()) return false;
       if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.getCameraPermissionStatus === "function") {
         try {
           const st = window.AndroidVitaBridge.getCameraPermissionStatus();
@@ -1160,39 +1211,47 @@ function getDoctorReportMode() {
             safeLocalStorageSetItem("vitatakip_camera_perm_status", "granted");
             return true;
           }
+          if (st === "denied") {
+            cachedCameraPermState = "denied";
+            safeLocalStorageSetItem("vitatakip_camera_perm_status", "denied");
+            return false;
+          }
         } catch (_) {}
       }
       return cachedCameraPermState === "granted";
     }
 
     async function updateCameraPermissionUI() {
+      const info = await queryCameraPermissionStatus();
+      const { effectiveStatus, osStatus, appApproved } = info;
+
       const badge = document.getElementById("settingsCameraPermBadge");
       const btn = document.getElementById("settingsCameraPermBtn");
       const hint = document.getElementById("settingsCameraPermHint");
+      const consentCheckbox = document.getElementById("settingsCameraAppConsentCheckbox");
+      const lastCheckEl = document.getElementById("settingsCameraLastCheckTime");
+      const barcodeModuleBadge = document.getElementById("cameraPermModuleBarcodeBadge");
+      const aiPhotoModuleBadge = document.getElementById("cameraPermModuleAiPhotoBadge");
+      const addSupModalBadge = document.getElementById("addSupModalCameraPermBadge");
+      const scannerModalBadge = document.getElementById("scannerModalCameraPermBadge");
+      const aiPhotoSectionBadge = document.getElementById("barcodeAiPhotoPermBadge");
 
-      let status = cachedCameraPermState;
-      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.getCameraPermissionStatus === "function") {
-        try {
-          status = window.AndroidVitaBridge.getCameraPermissionStatus() || status;
-        } catch (_) {}
-      } else if (navigator.permissions && typeof navigator.permissions.query === "function") {
-        try {
-          const permObj = await navigator.permissions.query({ name: "camera" });
-          if (permObj && permObj.state) {
-            status = permObj.state;
-            permObj.onchange = () => updateCameraPermissionUI();
-          }
-        } catch (_) {}
+      if (consentCheckbox) {
+        consentCheckbox.checked = Boolean(appApproved);
+      }
+      if (lastCheckEl) {
+        const nowStr = new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+        lastCheckEl.textContent = `Son sorgu: ${nowStr}`;
       }
 
-      cachedCameraPermState = status;
-      safeLocalStorageSetItem("vitatakip_camera_perm_status", status);
-
       if (badge) {
-        if (status === "granted") {
+        if (effectiveStatus === "granted") {
           badge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200";
           badge.textContent = "Kamera İzni: Onaylandı ✓";
-        } else if (status === "denied") {
+        } else if (effectiveStatus === "revoked_in_settings") {
+          badge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-800 border border-slate-300";
+          badge.textContent = "Kamera İzni: Ayarlardan Kapatıldı";
+        } else if (osStatus === "denied") {
           badge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200";
           badge.textContent = "Kamera İzni: Engellendi";
         } else {
@@ -1202,34 +1261,162 @@ function getDoctorReportMode() {
       }
 
       if (btn) {
-        if (status === "granted") {
-          btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-emerald-100 text-emerald-900 border border-emerald-300 transition cursor-pointer shrink-0 flex items-center gap-1.5";
+        if (effectiveStatus === "granted") {
+          btn.className = "px-3.5 py-2 rounded-xl font-bold text-xs bg-emerald-100 text-emerald-900 border border-emerald-300 transition cursor-pointer shrink-0 flex items-center gap-1.5";
           btn.innerHTML = `<i class="fa-solid fa-circle-check"></i><span>Kamera İzni Açık (Yeniden Doğrula)</span>`;
+        } else if (effectiveStatus === "revoked_in_settings") {
+          btn.className = "px-3.5 py-2 rounded-xl font-bold text-xs bg-teal-600 hover:bg-teal-700 text-white transition cursor-pointer shrink-0 flex items-center gap-1.5 shadow-2xs";
+          btn.innerHTML = `<i class="fa-solid fa-unlock"></i><span>Kamera Erişim Onayını Aç</span>`;
         } else {
-          btn.className = "px-3 py-1.5 rounded-xl font-bold text-xs bg-teal-600 hover:bg-teal-700 text-white transition cursor-pointer shrink-0 flex items-center gap-1.5 shadow-2xs";
+          btn.className = "px-3.5 py-2 rounded-xl font-bold text-xs bg-teal-600 hover:bg-teal-700 text-white transition cursor-pointer shrink-0 flex items-center gap-1.5 shadow-2xs";
           btn.innerHTML = `<i class="fa-solid fa-video"></i><span>Kamera İznini Onayla</span>`;
         }
       }
 
       if (hint) {
-        if (status === "granted") {
-          hint.textContent = "Kamera erişim izni aktif. Takviye Ekle ve İlaç Seç & Denetle sayfalarında barkod okuyucu ve AI kutu kamerasını doğrudan kullanabilirsiniz.";
-          hint.className = "text-[10px] text-emerald-800 font-semibold leading-relaxed";
-        } else if (status === "denied") {
-          hint.textContent = "Kamera izni reddedilmiş görünüyor. 'Cihaz İzin Ayarları' butonuna basarak uygulama ayarlarından Kamera iznini açabilirsiniz.";
-          hint.className = "text-[10px] text-rose-700 font-semibold leading-relaxed";
+        if (effectiveStatus === "granted") {
+          hint.textContent = "Kamera erişim onayı aktif. Hem Barkod / Karekod Okuyucu hem de Yapay Zeka (AI) Fotoğraf Analizi modülleri uygulama genelinde yetkilendirildi.";
+          hint.className = "text-[11px] text-emerald-800 font-semibold leading-relaxed mt-0.5";
+        } else if (effectiveStatus === "revoked_in_settings") {
+          hint.textContent = "Uygulama içi kamera erişim onayı Ayarlar > İzinler menüsünden kapatılmış. Barkod okuyucu ve AI fotoğraf analizi için onayı tekrar açabilirsiniz.";
+          hint.className = "text-[11px] text-amber-800 font-semibold leading-relaxed mt-0.5";
+        } else if (osStatus === "denied") {
+          hint.textContent = "Kamera izni cihaz/tarayıcı düzeyinde reddedilmiş görünüyor. 'Cihaz Ayarları' butonuna basarak uygulama ayarlarından Kamera iznini açabilirsiniz.";
+          hint.className = "text-[11px] text-rose-700 font-semibold leading-relaxed mt-0.5";
         } else {
-          hint.textContent = "Barkod okuyucu veya kutu fotoğrafı çekimi için 'Kamera İznini Onayla' butonuna dokunarak cihaz kamerasına izin verin.";
-          hint.className = "text-[10px] text-slate-600 leading-relaxed";
+          hint.textContent = "Barkod okuyucu veya AI kutu fotoğrafı analizi için 'Kamera İznini Onayla' butonuna dokunarak cihaz kamerasına erişim izni verin.";
+          hint.className = "text-[11px] text-slate-600 leading-relaxed mt-0.5";
         }
       }
+
+      const applyModuleBadge = (el, moduleName) => {
+        if (!el) return;
+        if (effectiveStatus === "granted") {
+          el.className = "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0";
+          el.textContent = `${moduleName}: Hazır ✓`;
+        } else if (effectiveStatus === "revoked_in_settings") {
+          el.className = "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300 shrink-0";
+          el.textContent = `${moduleName}: Kapalı`;
+        } else if (osStatus === "denied") {
+          el.className = "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200 shrink-0";
+          el.textContent = `${moduleName}: İzin Yok`;
+        } else {
+          el.className = "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 shrink-0";
+          el.textContent = `${moduleName}: Onay Bekliyor`;
+        }
+      };
+
+      applyModuleBadge(barcodeModuleBadge, "Barkod");
+      applyModuleBadge(aiPhotoModuleBadge, "AI Fotoğraf");
+
+      if (addSupModalBadge) {
+        if (effectiveStatus === "granted") {
+          addSupModalBadge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 cursor-pointer transition hover:opacity-90 flex items-center gap-1";
+          addSupModalBadge.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600"></i><span>Kamera &amp; AI İzni: Onaylı ✓</span>`;
+        } else if (effectiveStatus === "revoked_in_settings" || osStatus === "denied") {
+          addSupModalBadge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-300 cursor-pointer transition hover:opacity-90 flex items-center gap-1";
+          addSupModalBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-rose-600"></i><span>Kamera İzni: Ayarlardan Aç</span>`;
+        } else {
+          addSupModalBadge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 cursor-pointer transition hover:opacity-90 flex items-center gap-1";
+          addSupModalBadge.innerHTML = `<i class="fa-solid fa-camera text-amber-600"></i><span>Kamera İzni: Onayla</span>`;
+        }
+      }
+
+      if (scannerModalBadge) {
+        if (effectiveStatus === "granted") {
+          scannerModalBadge.className = "inline-flex items-center gap-1 rounded-full bg-emerald-400/25 border border-emerald-300/60 px-2.5 py-0.5 text-[10px] font-extrabold text-emerald-100 cursor-pointer hover:bg-emerald-400/35 transition";
+          scannerModalBadge.innerHTML = `<i class="fa-solid fa-circle-check"></i><span>Kamera &amp; AI İzni: Onaylı ✓</span>`;
+        } else if (effectiveStatus === "revoked_in_settings" || osStatus === "denied") {
+          scannerModalBadge.className = "inline-flex items-center gap-1 rounded-full bg-rose-400/30 border border-rose-300/60 px-2.5 py-0.5 text-[10px] font-extrabold text-rose-100 cursor-pointer hover:bg-rose-400/40 transition";
+          scannerModalBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i><span>Kamera İzni: Ayarlardan Aç</span>`;
+        } else {
+          scannerModalBadge.className = "inline-flex items-center gap-1 rounded-full bg-amber-400/25 border border-amber-300/50 px-2.5 py-0.5 text-[10px] font-extrabold text-amber-100 cursor-pointer hover:bg-amber-400/35 transition";
+          scannerModalBadge.innerHTML = `<i class="fa-solid fa-camera"></i><span>Kamera İzni: Onayla</span>`;
+        }
+      }
+
+      if (aiPhotoSectionBadge) {
+        if (effectiveStatus === "granted") {
+          aiPhotoSectionBadge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 shrink-0";
+          aiPhotoSectionBadge.textContent = "AI Kamera İzni: Onaylı ✓";
+        } else if (effectiveStatus === "revoked_in_settings" || osStatus === "denied") {
+          aiPhotoSectionBadge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200 shrink-0";
+          aiPhotoSectionBadge.textContent = "AI Kamera İzni: Kapalı / Engelli";
+        } else {
+          aiPhotoSectionBadge.className = "text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 shrink-0";
+          aiPhotoSectionBadge.textContent = "AI Kamera İzni: Onay Bekliyor";
+        }
+      }
+
+      return info;
     }
 
-    async function requestOrVerifyCameraPermission(fromUserClick = true) {
-      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.requestCameraPermission === "function") {
+    function requestNativeAndroidCameraPermissionPromise(timeoutMs = 6000) {
+      return new Promise(resolve => {
+        if (!window.AndroidVitaBridge || typeof window.AndroidVitaBridge.requestCameraPermission !== "function") {
+          resolve(false);
+          return;
+        }
+        try {
+          if (typeof window.AndroidVitaBridge.getCameraPermissionStatus === "function" &&
+              window.AndroidVitaBridge.getCameraPermissionStatus() === "granted") {
+            cachedCameraPermState = "granted";
+            safeLocalStorageSetItem("vitatakip_camera_perm_status", "granted");
+            resolve(true);
+            return;
+          }
+        } catch (_) {}
+
+        let settled = false;
+        const finish = (granted) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(Boolean(granted));
+        };
+        pendingNativeCameraPermResolvers.push(finish);
+
+        const timer = window.setTimeout(() => {
+          let grantedNow = false;
+          try {
+            grantedNow = window.AndroidVitaBridge.getCameraPermissionStatus() === "granted";
+          } catch (_) {}
+          finish(grantedNow);
+        }, timeoutMs);
+
         try {
           window.AndroidVitaBridge.requestCameraPermission();
-        } catch (_) {}
+        } catch (_) {
+          finish(false);
+        }
+      });
+    }
+
+    async function requestOrVerifyCameraPermission(fromUserClick = true, featureType = "all") {
+      // Kullanıcı onay butonuna bastığında uygulama içi kamera onayını da aktif et
+      setCameraAppConsentEnabled(true);
+      const consentCheckbox = document.getElementById("settingsCameraAppConsentCheckbox");
+      if (consentCheckbox) consentCheckbox.checked = true;
+
+      let nativeGranted = false;
+      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.requestCameraPermission === "function") {
+        nativeGranted = await requestNativeAndroidCameraPermissionPromise(5500);
+        if (nativeGranted) {
+          cachedCameraPermState = "granted";
+          safeLocalStorageSetItem("vitatakip_camera_perm_status", "granted");
+          await updateCameraPermissionUI();
+          if (typeof window.renderPwaNotificationSmartChecklist === "function") {
+            window.renderPwaNotificationSmartChecklist();
+          }
+          if (fromUserClick && typeof showToast === "function") {
+            showToast(
+              "Kamera Erişim İzni Onaylandı",
+              "Barkod okuyucu ve Yapay Zeka (AI) fotoğraf analizi için kamera erişimi aktif.",
+              "success"
+            );
+          }
+          return true;
+        }
       }
 
       if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === "function") {
@@ -1242,8 +1429,15 @@ function getDoctorReportMode() {
           cachedCameraPermState = "granted";
           safeLocalStorageSetItem("vitatakip_camera_perm_status", "granted");
           await updateCameraPermissionUI();
+          if (typeof window.renderPwaNotificationSmartChecklist === "function") {
+            window.renderPwaNotificationSmartChecklist();
+          }
           if (fromUserClick && typeof showToast === "function") {
-            showToast("Kamera İzni Onaylandı", "Barkod okuyucu ve AI kutu kamerası kullanıma hazır.", "success");
+            showToast(
+              "Kamera Erişim İzni Onaylandı",
+              "Barkod okuyucu ve Yapay Zeka (AI) kutu fotoğraf analizi kullanıma hazır.",
+              "success"
+            );
           }
           return true;
         } catch (err) {
@@ -1253,6 +1447,9 @@ function getDoctorReportMode() {
                 cachedCameraPermState = "granted";
                 safeLocalStorageSetItem("vitatakip_camera_perm_status", "granted");
                 await updateCameraPermissionUI();
+                if (typeof window.renderPwaNotificationSmartChecklist === "function") {
+                  window.renderPwaNotificationSmartChecklist();
+                }
                 if (fromUserClick && typeof showToast === "function") {
                   showToast("Kamera İzni Onaylandı", "Cihaz kamera izni aktif.", "success");
                 }
@@ -1263,10 +1460,18 @@ function getDoctorReportMode() {
           cachedCameraPermState = err?.name === "NotAllowedError" ? "denied" : "prompt";
           safeLocalStorageSetItem("vitatakip_camera_perm_status", cachedCameraPermState);
           await updateCameraPermissionUI();
+          if (typeof window.renderPwaNotificationSmartChecklist === "function") {
+            window.renderPwaNotificationSmartChecklist();
+          }
           if (fromUserClick && typeof showToast === "function") {
+            const featureLabel = featureType === "ai_photo"
+              ? "Yapay Zeka Fotoğraf Analizi"
+              : featureType === "barcode"
+              ? "Barkod Okuyucu"
+              : "Barkod Okuyucu ve AI Fotoğraf Analizi";
             showToast(
-              "Kamera İzni Bekleniyor",
-              "Açılan izin penceresinden 'İzin Ver' seçeneğine dokunun veya 'Cihaz İzin Ayarları'ndan Kamera iznini açın.",
+              "Kamera İzni Gerekli",
+              `${featureLabel} için açılan izin penceresinden 'İzin Ver'e dokunun veya Ayarlar > İzinler > Cihaz Ayarları'ndan Kamera iznini açın.`,
               "warning"
             );
           }
@@ -1275,7 +1480,133 @@ function getDoctorReportMode() {
       }
 
       await updateCameraPermissionUI();
+      if (typeof window.renderPwaNotificationSmartChecklist === "function") {
+        window.renderPwaNotificationSmartChecklist();
+      }
       return isCameraPermissionGranted();
+    }
+
+    async function toggleCameraAppConsentFromSettings(checked) {
+      if (checked) {
+        setCameraAppConsentEnabled(true);
+        await requestOrVerifyCameraPermission(true, "all");
+      } else {
+        setCameraAppConsentEnabled(false);
+        if (typeof window.stopScanner === "function") {
+          try { window.stopScanner(); } catch (_) {}
+        }
+        if (typeof window.stopBarcodeCameraScan === "function") {
+          try { window.stopBarcodeCameraScan(false); } catch (_) {}
+        }
+        await updateCameraPermissionUI();
+        if (typeof window.renderPwaNotificationSmartChecklist === "function") {
+          window.renderPwaNotificationSmartChecklist();
+        }
+        if (typeof showToast === "function") {
+          showToast(
+            "Kamera Erişim Onayı Kapatıldı",
+            "Barkod okuyucu ve AI fotoğraf analizi için kamera erişimi duraklatıldı. İstediğiniz zaman buradan tekrar açabilirsiniz.",
+            "info"
+          );
+        }
+      }
+    }
+
+    function openCameraPermissionsInSettings() {
+      if (typeof window.closeAddSupplementModal === "function") {
+        try { window.closeAddSupplementModal(); } catch (_) {}
+      }
+      if (typeof window.closeBarcodeScannerModal === "function") {
+        try { window.closeBarcodeScannerModal(); } catch (_) {}
+      }
+      if (typeof window.navigateToView === "function") {
+        window.navigateToView("view-settings");
+      }
+      window.setTimeout(() => {
+        const row = document.getElementById("settingsCameraPermissionRow") || document.getElementById("settingsSectionNotifications");
+        if (row) {
+          try {
+            row.scrollIntoView({ behavior: "smooth", block: "center" });
+            row.classList.add("ring-2", "ring-teal-500", "rounded-2xl");
+            window.setTimeout(() => {
+              row.classList.remove("ring-2", "ring-teal-500", "rounded-2xl");
+            }, 2200);
+          } catch (_) {}
+        }
+      }, 100);
+    }
+
+    async function handleModalCameraPermBadgeClick(sourceModal = "") {
+      const info = await queryCameraPermissionStatus();
+      if (info.effectiveStatus === "granted") {
+        if (typeof showToast === "function") {
+          showToast(
+            "Kamera & AI Fotoğraf İzni Aktif",
+            "Barkod okuyucu ve Yapay Zeka kutu fotoğraf analizi için kamera erişimi onaylı durumda.",
+            "success"
+          );
+        }
+        return;
+      }
+      const grantedNow = await requestOrVerifyCameraPermission(true, "all");
+      if (!grantedNow) {
+        openCameraPermissionsInSettings();
+      }
+    }
+
+    /**
+     * Uygulama genelinde hem Barkod Okuyucu ('barcode') hem de Yapay Zeka Fotoğraf Analizi ('ai_photo')
+     * işlemlerinden önce kamera erişim onayını ve cihaz iznini sorgulayan merkezi fonksiyon.
+     */
+    async function ensureCameraPermissionForFeature(featureType = "barcode", options = {}) {
+      const featureLabel = featureType === "ai_photo"
+        ? "Yapay Zeka (AI) Fotoğraf Analizi"
+        : "Barkod / Karekod Okuyucu";
+
+      const initialInfo = await queryCameraPermissionStatus();
+
+      // 1. Kullanıcı Ayarlar > İzinler menüsünden uygulama içi kamera onayını açıkça kapattıysa:
+      if (!initialInfo.appApproved) {
+        await updateCameraPermissionUI();
+        if (typeof showToast === "function") {
+          showToast(
+            "Kamera Onayı Kapalı",
+            `${featureLabel} için Ayarlar > İzinler menüsünden 'Uygulama İçi Kamera ve Görsel Analiz Erişim Onayı'nı etkinleştirin.`,
+            "warning"
+          );
+        }
+        return false;
+      }
+
+      // 2. Zaten izin onaylıysa:
+      if (initialInfo.granted) {
+        await updateCameraPermissionUI();
+        return true;
+      }
+
+      // 3. İzin henüz alınmamış veya sorulması gerekiyorsa:
+      const grantedAfterRequest = await requestOrVerifyCameraPermission(false, featureType);
+      const afterInfo = await queryCameraPermissionStatus();
+      await updateCameraPermissionUI();
+
+      if (grantedAfterRequest || afterInfo.granted) {
+        return true;
+      }
+
+      // Web ortamında (Android köprüsü yokken) kullanıcı dosya seçici üzerinden mevcut bir kutu görseli yüklüyorsa:
+      const hasAndroidBridge = Boolean(window.AndroidVitaBridge && typeof window.AndroidVitaBridge.getCameraPermissionStatus === "function");
+      if (featureType === "ai_photo" && !hasAndroidBridge && afterInfo.appApproved && afterInfo.osStatus !== "denied") {
+        return true;
+      }
+
+      if (typeof showToast === "function") {
+        showToast(
+          `${featureLabel} İçin Kamera İzni Gerekli`,
+          "Lütfen kamera iznini onaylayın veya Ayarlar > İzinler bölümünden Kamera Erişim Onayını açın.",
+          "warning"
+        );
+      }
+      return false;
     }
 
     function openNativeAppPermissionSettings() {
@@ -1289,17 +1620,33 @@ function getDoctorReportMode() {
     }
 
     window.onAndroidCameraPermissionResult = function(status) {
-      cachedCameraPermState = status === "granted" ? "granted" : "denied";
+      const isGranted = status === "granted";
+      cachedCameraPermState = isGranted ? "granted" : "denied";
       safeLocalStorageSetItem("vitatakip_camera_perm_status", cachedCameraPermState);
+      if (isGranted) {
+        setCameraAppConsentEnabled(true);
+      }
+      while (pendingNativeCameraPermResolvers.length > 0) {
+        const resolver = pendingNativeCameraPermResolvers.shift();
+        try { resolver(isGranted); } catch (_) {}
+      }
       updateCameraPermissionUI();
-      if (status === "granted" && typeof showToast === "function") {
+      if (typeof window.renderPwaNotificationSmartChecklist === "function") {
+        window.renderPwaNotificationSmartChecklist();
+      }
+      if (isGranted && typeof showToast === "function") {
         showToast("Kamera İzni Onaylandı", "Barkod okuyucu ve AI kutu tanıma kamerası aktif edildi.", "success");
       }
     };
 
+    window.queryCameraPermissionStatus = queryCameraPermissionStatus;
     window.isCameraPermissionGranted = isCameraPermissionGranted;
     window.updateCameraPermissionUI = updateCameraPermissionUI;
     window.requestOrVerifyCameraPermission = requestOrVerifyCameraPermission;
+    window.toggleCameraAppConsentFromSettings = toggleCameraAppConsentFromSettings;
+    window.openCameraPermissionsInSettings = openCameraPermissionsInSettings;
+    window.handleModalCameraPermBadgeClick = handleModalCameraPermBadgeClick;
+    window.ensureCameraPermissionForFeature = ensureCameraPermissionForFeature;
     window.openNativeAppPermissionSettings = openNativeAppPermissionSettings;
 
     async function toggleBrowserNotifications() {

@@ -390,7 +390,50 @@
         completed: testVerified,
         actionLabel: "Test Bildirimi Gönder",
         actionType: "send_test"
-      }
+      },
+      (function () {
+        const appConsent = safeGetStorage("vitatakip_camera_app_approved") !== "false";
+        let camOsPerm = String(safeGetStorage("vitatakip_camera_perm_status") || "prompt").toLowerCase();
+        if (hasBridge && typeof window.AndroidVitaBridge.getCameraPermissionStatus === "function") {
+          try {
+            camOsPerm = String(window.AndroidVitaBridge.getCameraPermissionStatus() || camOsPerm).toLowerCase();
+          } catch (_) {}
+        }
+        const camGranted = appConsent && camOsPerm === "granted";
+        const camDenied = !appConsent || camOsPerm === "denied";
+        return {
+          id: "camera_permission_state",
+          order: 7,
+          browserGroupKey: browserProfile.key,
+          browserGroupLabel: `Tarayıcı Grubu: ${browserProfile.shortLabel}`,
+          swGroupKey: swProfile.key,
+          swGroupLabel: `SW Durumu: ${swProfile.shortLabel}`,
+          categoryCluster: "browser_permission",
+          title: "Kamera Erişim Onayı (Barkod Okuyucu & AI Kutu Fotoğraf Analizi)",
+          description: camGranted
+            ? "Kamera erişim izni onaylandı. Hem Barkod / Karekod Okuyucu hem de Yapay Zeka (AI) kutu fotoğraf analizi modülleri hazır."
+            : !appConsent
+            ? "Uygulama içi kamera erişim onayı Ayarlar > İzinler menüsünden kapatılmış. Tekrar açmak için onaylayın."
+            : camOsPerm === "denied"
+            ? "Cihaz/tarayıcı kamera izni engellenmiş. Barkod okuyucu ve AI fotoğraf analizi için uygulama ayarlarından Kamera iznini açın."
+            : "Takviye/ilaç barkod okuyucu ve AI kutu fotoğrafı analizi için kamera erişim iznini onaylayın.",
+          badgeText: camGranted
+            ? "Kamera & AI Onaylı ✓"
+            : !appConsent
+            ? "Ayarlardan Kapalı"
+            : camOsPerm === "denied"
+            ? "Engellendi (Denied)"
+            : "Kamera Onayı Bekliyor",
+          status: camGranted ? "completed" : camDenied ? "error" : "pending",
+          completed: camGranted,
+          actionLabel: camGranted
+            ? "Kamerayı Doğrula"
+            : camOsPerm === "denied" && hasBridge
+            ? "Cihaz Kamera Ayarları"
+            : "Kamera İznini Onayla",
+          actionType: camOsPerm === "denied" && hasBridge ? "open_camera_settings" : "request_camera_permission"
+        };
+      })()
     ];
   }
 
@@ -621,7 +664,7 @@
     if (drawerStatusBadge) {
       if (completedCount === totalCount) {
         drawerStatusBadge.className = "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200";
-        drawerStatusBadge.textContent = `${browserProfile.shortLabel} • ${swProfile.shortLabel} (6/6)`;
+        drawerStatusBadge.textContent = `${browserProfile.shortLabel} • ${swProfile.shortLabel} (${completedCount}/${totalCount})`;
       } else if (permState === "granted") {
         drawerStatusBadge.className = "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200";
         drawerStatusBadge.textContent = `${browserProfile.shortLabel} • ${completedCount}/${totalCount} Açık`;
@@ -894,6 +937,11 @@
   async function autoConfigureAllPwaNotifications() {
     await refreshServiceWorkerState();
     await requestPermissionFromChecklist();
+    if (typeof window.requestOrVerifyCameraPermission === "function") {
+      try {
+        await window.requestOrVerifyCameraPermission(false, "all");
+      } catch (_) {}
+    }
     safeSetStorage(STORAGE_KEY_ENABLED, "true");
     if (typeof window.updateNotificationToggleUI === "function") {
       window.updateNotificationToggleUI();
@@ -929,6 +977,19 @@
     }
     if (actionType === "request_permission") {
       await requestPermissionFromChecklist();
+      return;
+    }
+    if (actionType === "request_camera_permission") {
+      if (typeof window.requestOrVerifyCameraPermission === "function") {
+        await window.requestOrVerifyCameraPermission(true, "all");
+      }
+      renderPwaNotificationSmartChecklist();
+      return;
+    }
+    if (actionType === "open_camera_settings") {
+      if (typeof window.openNativeAppPermissionSettings === "function") {
+        window.openNativeAppPermissionSettings();
+      }
       return;
     }
     if (actionType === "open_settings") {

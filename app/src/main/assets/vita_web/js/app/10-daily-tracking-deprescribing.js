@@ -518,7 +518,20 @@ function renderDailyTab() {
       const fallbackBox = document.getElementById("addSupFallbackConfirmBox");
       if (fallbackBox) fallbackBox.classList.add("hidden");
 
-      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.requestCameraPermission === "function") {
+      if (typeof window.ensureCameraPermissionForFeature === "function") {
+        const hasPerm = await window.ensureCameraPermissionForFeature("barcode", {
+          sourceModal: "addSupplementModal"
+        });
+        if (!hasPerm) {
+          if (typeof window.updateCameraPermissionUI === "function") window.updateCameraPermissionUI();
+          showAddSupFeedback(
+            `🔒 Kamera erişim onayı kapalı veya reddedildi. Barkod okuyucuyu kullanmak için <button type="button" onclick="if(typeof openCameraPermissionsInSettings==='function')openCameraPermissionsInSettings();" class="underline font-black text-indigo-800 hover:text-indigo-950 ml-1 cursor-pointer">Ayarlar &gt; İzinler &gt; Kamera Erişim Onayı</button> menüsünden izni etkinleştirin.`,
+            "warning",
+            true
+          );
+          return;
+        }
+      } else if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.requestCameraPermission === "function") {
         try {
           window.AndroidVitaBridge.requestCameraPermission();
         } catch (_) {}
@@ -619,11 +632,16 @@ function renderDailyTab() {
         }
       } catch (err) {
         stopScanner();
-        showAddSupFeedback("Kamera izni bekleniyor veya kamera başlatılamadı. Ayarlar > İzinler bölümünden 'Kamera İznini Onayla' butonuna basabilir ya da 'Fotoğraf Çek / AI ile Kutuyu Tanı' butonunu kullanabilirsiniz.", "warning");
+        if (typeof window.updateCameraPermissionUI === "function") window.updateCameraPermissionUI();
+        showAddSupFeedback(
+          `Kamera izni bekleniyor veya kamera başlatılamadı. <button type="button" onclick="if(typeof openCameraPermissionsInSettings==='function')openCameraPermissionsInSettings();" class="underline font-black text-indigo-800 hover:text-indigo-950 ml-1 cursor-pointer">Ayarlar &gt; İzinler &gt; Kamera Erişim Onayı</button> bölümünden izni onaylayabilir veya hazır listeden seçebilirsiniz.`,
+          "warning",
+          true
+        );
       }
     }
 
-    function showAddSupFeedback(message, tone = "success") {
+    function showAddSupFeedback(message, tone = "success", allowHtml = false) {
       const box = document.getElementById("addSupBarcodeFeedbackBox");
       if (!box) return;
       box.classList.remove("hidden");
@@ -634,7 +652,11 @@ function renderDailyTab() {
       } else {
         box.className = "rounded-xl border border-indigo-200 bg-indigo-50 p-2.5 text-xs font-bold text-indigo-950";
       }
-      box.textContent = message;
+      if (allowHtml) {
+        box.innerHTML = message;
+      } else {
+        box.textContent = message;
+      }
     }
 
     function fillAddSupplementModalFormFromItem(item) {
@@ -750,8 +772,22 @@ function renderDailyTab() {
       if (fallbackBox) fallbackBox.classList.remove("hidden");
     }
 
-    function triggerGeminiBoxScan() {
+    async function triggerGeminiBoxScan() {
       stopScanner();
+      if (typeof window.ensureCameraPermissionForFeature === "function") {
+        const hasPerm = await window.ensureCameraPermissionForFeature("ai_photo", {
+          sourceModal: "addSupplementModal"
+        });
+        if (!hasPerm) {
+          if (typeof window.updateCameraPermissionUI === "function") window.updateCameraPermissionUI();
+          showAddSupFeedback(
+            `🔒 Yapay zeka kutu fotoğraf analizi için kamera erişim onayı gereklidir. <button type="button" onclick="if(typeof openCameraPermissionsInSettings==='function')openCameraPermissionsInSettings();" class="underline font-black text-indigo-800 hover:text-indigo-950 ml-1 cursor-pointer">Ayarlar &gt; İzinler &gt; Kamera Erişim Onayı</button> menüsünden izni onaylayın.`,
+            "warning",
+            true
+          );
+          return;
+        }
+      }
       const fileInput = document.getElementById("addSupAiPhotoInput");
       if (fileInput) {
         fileInput.value = "";
@@ -775,6 +811,21 @@ function renderDailyTab() {
     async function handleAddSupAiPhotoInput(event) {
       const file = event?.target?.files?.[0];
       if (!file) return;
+
+      if (typeof window.ensureCameraPermissionForFeature === "function") {
+        const hasPerm = await window.ensureCameraPermissionForFeature("ai_photo", {
+          sourceModal: "addSupplementModal"
+        });
+        if (!hasPerm) {
+          if (event?.target) event.target.value = "";
+          showAddSupFeedback(
+            `🔒 Kamera ve AI Fotoğraf Analizi izni kapalıdır. <button type="button" onclick="if(typeof openCameraPermissionsInSettings==='function')openCameraPermissionsInSettings();" class="underline font-black text-indigo-800 hover:text-indigo-950 ml-1 cursor-pointer">Ayarlar &gt; İzinler</button> menüsünden kamera erişimini onaylayın.`,
+            "warning",
+            true
+          );
+          return;
+        }
+      }
 
       const fallbackBox = document.getElementById("addSupFallbackConfirmBox");
       if (fallbackBox) fallbackBox.classList.add("hidden");
@@ -875,6 +926,9 @@ function renderDailyTab() {
       modal.style.display = "flex";
       stopScanner();
       populateAddSupQuickDbSelect();
+      if (typeof window.updateCameraPermissionUI === "function") {
+        window.updateCameraPermissionUI();
+      }
 
       const barcodeInput = document.getElementById("addSupBarcodeInput");
       const feedbackBox = document.getElementById("addSupBarcodeFeedbackBox");

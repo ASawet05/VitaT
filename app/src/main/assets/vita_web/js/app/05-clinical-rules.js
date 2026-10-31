@@ -264,7 +264,15 @@ const KDSSRuleEngine = {
         : "eGFR tek başına böbrek hastalığını doğrulamaz veya dışlamaz; yaş, klinik durum, idrar bulguları ve laboratuvar referanslarıyla birlikte değerlendirilmelidir.";
 
       return {
-        egfr, stage, desc, badgeClass, riskLevel, interpretationNote,
+        egfr,
+        stage,
+        stageCode: stage,
+        desc,
+        stageName: desc,
+        badgeClass,
+        riskLevel,
+        interpretationNote,
+        clinicalNote: interpretationNote,
         badgeHtml: `<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black border ${badgeClass}" title="${interpretationNote}">
           <i class="fa-solid fa-droplet-slash text-[9px]"></i>
           <span>eGFR: ${egfr} mL/dk/1.73m² (Evre ${stage})</span>

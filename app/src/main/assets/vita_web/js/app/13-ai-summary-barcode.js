@@ -699,7 +699,37 @@ window.VitaAIChat = VitaAIChat;
       `).join("");
     }
 
-    function triggerAiPhotoBoxFallback() {
+    async function triggerBarcodeModalPhotoInput() {
+      stopBarcodeCameraScan(false);
+      if (typeof window.ensureCameraPermissionForFeature === "function") {
+        const hasPerm = await window.ensureCameraPermissionForFeature("ai_photo", {
+          sourceModal: "barcodeScannerModal"
+        });
+        if (!hasPerm) {
+          if (typeof window.updateCameraPermissionUI === "function") window.updateCameraPermissionUI();
+          setBarcodeCameraStatus("Kamera ve AI Fotoğraf Analizi izni kapalı veya reddedildi. Ayarlar > İzinler > Kamera Erişim Onayı menüsünden izni etkinleştirin.", true);
+          return;
+        }
+      }
+      const fileInput = document.getElementById("barcodePhotoFile");
+      if (fileInput) {
+        fileInput.value = "";
+        fileInput.click();
+      }
+    }
+
+    async function triggerAiPhotoBoxFallback() {
+      stopBarcodeCameraScan(false);
+      if (typeof window.ensureCameraPermissionForFeature === "function") {
+        const hasPerm = await window.ensureCameraPermissionForFeature("ai_photo", {
+          sourceModal: "barcodeScannerModal"
+        });
+        if (!hasPerm) {
+          if (typeof window.updateCameraPermissionUI === "function") window.updateCameraPermissionUI();
+          setBarcodeCameraStatus("Kamera ve AI Fotoğraf Analizi izni kapalı veya reddedildi. Ayarlar > İzinler > Kamera Erişim Onayı menüsünden izni etkinleştirin.", true);
+          return;
+        }
+      }
       const fileInput = document.getElementById("barcodePhotoFile");
       if (fileInput) {
         try {
@@ -751,6 +781,7 @@ window.VitaAIChat = VitaAIChat;
 
     window.switchScannerChannel = switchScannerChannel;
     window.onScannerNameSearchInput = onScannerNameSearchInput;
+    window.triggerBarcodeModalPhotoInput = triggerBarcodeModalPhotoInput;
     window.triggerAiPhotoBoxFallback = triggerAiPhotoBoxFallback;
     window.openBarcodeScannerModalForAIPhoto = openBarcodeScannerModalForAIPhoto;
     window.syncFormFieldsToManualAddModal = syncFormFieldsToManualAddModal;
@@ -861,6 +892,9 @@ window.VitaAIChat = VitaAIChat;
         });
       }
       modal.classList.remove("hidden"); modal.style.display = "flex"; modal.setAttribute("aria-hidden", "false");
+      if (typeof window.updateCameraPermissionUI === "function") {
+        window.updateCameraPermissionUI();
+      }
       setBarcodeCameraStatus("Kamera başlatılmadı. Barkod okutmak için 'Kamerayı Aç ve Barkod / Karekod Oku' düğmesine dokunun veya listeden seçin.");
     }
 
@@ -938,7 +972,17 @@ window.VitaAIChat = VitaAIChat;
       const startButton = document.getElementById("barcodeStartCameraBtn");
       const stopButton = document.getElementById("barcodeStopCameraBtn");
       if (!video) return;
-      if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.requestCameraPermission === "function") {
+
+      if (typeof window.ensureCameraPermissionForFeature === "function") {
+        const hasPerm = await window.ensureCameraPermissionForFeature("barcode", {
+          sourceModal: "barcodeScannerModal"
+        });
+        if (!hasPerm) {
+          if (typeof window.updateCameraPermissionUI === "function") window.updateCameraPermissionUI();
+          setBarcodeCameraStatus("Kamera erişim onayı kapalı veya reddedildi. Ayarlar > İzinler > Kamera Erişim Onayı menüsünden izni etkinleştirin.", true);
+          return;
+        }
+      } else if (window.AndroidVitaBridge && typeof window.AndroidVitaBridge.requestCameraPermission === "function") {
         try {
           window.AndroidVitaBridge.requestCameraPermission();
         } catch (_) {}
@@ -977,6 +1021,7 @@ window.VitaAIChat = VitaAIChat;
               () => {}
             );
             enforceInlineMutedVideoAttributes(html5QrContainer);
+            if (typeof window.updateCameraPermissionUI === "function") window.updateCameraPermissionUI();
             setBarcodeCameraStatus("HTML5-QRCode kamera okuyucu aktif (250×250). Barkodu veya karekodu çerçeveye hizalayın…");
             return;
           }
@@ -990,6 +1035,7 @@ window.VitaAIChat = VitaAIChat;
           video.classList.remove("hidden");
           enforceInlineMutedVideoAttributes();
           vitaBarcodeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+          if (typeof window.updateCameraPermissionUI === "function") window.updateCameraPermissionUI();
           video.srcObject = vitaBarcodeStream;
           await video.play();
           vitaBarcodeScanActive = true;
@@ -1493,9 +1539,19 @@ window.VitaAIChat = VitaAIChat;
       handleBarcodeDetected(value, "Manuel / TR Veritabanı");
     }
 
-    function handleBarcodePhotoSelected(event) {
+    async function handleBarcodePhotoSelected(event) {
       const file = event?.target?.files?.[0];
       if (!file) return;
+      if (typeof window.ensureCameraPermissionForFeature === "function") {
+        const hasPerm = await window.ensureCameraPermissionForFeature("ai_photo", {
+          sourceModal: "barcodeScannerModal"
+        });
+        if (!hasPerm) {
+          if (event?.target) event.target.value = "";
+          if (typeof window.updateCameraPermissionUI === "function") window.updateCameraPermissionUI();
+          return;
+        }
+      }
       if (!file.type || !file.type.startsWith("image/")) { showToast("Dosya türü desteklenmiyor", "Lütfen geçerli bir kutu fotoğrafı seçin.", "warning"); return; }
       if (file.size > 15 * 1024 * 1024) { showToast("Fotoğraf çok büyük", "Lütfen 15 MB altında bir fotoğraf seçin.", "warning"); event.target.value = ""; return; }
       vitaBarcodePhotoFile = file;
@@ -1510,6 +1566,15 @@ window.VitaAIChat = VitaAIChat;
 
     async function decodeBarcodeFromPhoto() {
       if (window.SoundEffects) SoundEffects.playClick();
+      if (typeof window.ensureCameraPermissionForFeature === "function") {
+        const hasPerm = await window.ensureCameraPermissionForFeature("ai_photo", {
+          sourceModal: "barcodeScannerModal"
+        });
+        if (!hasPerm) {
+          if (typeof window.updateCameraPermissionUI === "function") window.updateCameraPermissionUI();
+          return;
+        }
+      }
       const preview = document.getElementById("barcodePhotoPreview");
       if (!vitaBarcodePhotoFile || !preview || !preview.src) { showToast("Fotoğraf seçilmedi", "Önce kutu fotoğrafı çekin veya seçin.", "warning"); return; }
       try {
@@ -1618,6 +1683,15 @@ window.VitaAIChat = VitaAIChat;
 
     async function analyzeMedicationPhotoWithAI() {
       if (window.SoundEffects) SoundEffects.playClick();
+      if (typeof window.ensureCameraPermissionForFeature === "function") {
+        const hasPerm = await window.ensureCameraPermissionForFeature("ai_photo", {
+          sourceModal: "barcodeScannerModal"
+        });
+        if (!hasPerm) {
+          if (typeof window.updateCameraPermissionUI === "function") window.updateCameraPermissionUI();
+          return;
+        }
+      }
       if (!vitaBarcodePhotoFile) {
         showToast("Fotoğraf seçilmedi", "Önce kutunun fotoğrafını çekin veya cihazdan seçin.", "warning");
         return;
